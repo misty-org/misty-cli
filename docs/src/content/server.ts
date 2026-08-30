@@ -135,11 +135,11 @@ export const serverPages: DocPage[] = [
         title: "Environment behavior",
         blocks: [
           p(
-            "The command runs from the server directory and explicitly selects compose.dev.yml with the files under server/.env/dev. It starts the Space Agent workflow runtime and its isolated Postgres database along with the API, so no separate agent command is needed. On first use it also enables Connected Devices and creates persistent local pairing and ticket secrets. The Go server itself does not load an environment file.",
+            "The command runs from misty-server and explicitly selects compose.dev.yml with the files under misty-server/.env/dev. It starts the Space Agent workflow runtime and its isolated Postgres database along with the API, so no separate agent command is needed. On first use it also enables Connected Devices and creates persistent local pairing and ticket secrets. The Go server itself does not load an environment file.",
           ),
           note(
             "Agent model access",
-            "Set AI_GATEWAY_API_KEY in server/.env/dev/integrations/ai.env before assigning work to an agent. The stack can start without it, but agent runs will fail until the runtime can access AI Gateway.",
+            "Set AI_GATEWAY_API_KEY in misty-server/.env/dev/integrations/ai.env before assigning work to an agent. The stack can start without it, but agent runs will fail until the runtime can access AI Gateway.",
           ),
           note(
             "Attached mode",
@@ -189,7 +189,7 @@ export const serverPages: DocPage[] = [
         blocks: [
           code("misty server down"),
           p(
-            "This selects compose.dev.yml and runs Docker Compose down from server/. Containers and the Compose network are removed, while named volumes are preserved. Your local PostgreSQL data survives the next server up.",
+            "This selects compose.dev.yml and runs Docker Compose down from misty-server/. Containers and the Compose network are removed, while named volumes are preserved. Your local PostgreSQL data survives the next server up.",
           ),
         ],
       },
