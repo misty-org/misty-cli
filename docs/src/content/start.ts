@@ -15,7 +15,7 @@ export const startPages: DocPage[] = [
         title: "One command surface",
         blocks: [
           p(
-            "misty coordinates the sibling Misty app, website, backend, and CLI repositories. It does not replace their native tools; it gives recurring workflows one consistent, guarded entry point.",
+            "misty coordinates the sibling Misty app, website, backend, extensions, and CLI repositories. It does not replace their native tools; it gives recurring workflows one consistent, guarded entry point.",
           ),
           table(
             ["Area", "What the CLI owns"],
@@ -67,7 +67,7 @@ export const startPages: DocPage[] = [
         title: "Command families",
         blocks: [
           code(
-            "misty configure --workspace ~/misty-org\nmisty doctor\nmisty check <app|server|all>\nmisty desktop <command>\nmisty website <command>\nmisty server <command>\nmisty release <command>",
+            "misty configure --workspace ~/misty-org\nmisty doctor\nmisty check <app|server|website|extensions|cli|all>\nmisty desktop <command>\nmisty website <command>\nmisty server <command>\nmisty release <command>",
           ),
           list([
             "Use --help or -h at any level to inspect available commands and options.",
@@ -104,7 +104,7 @@ export const startPages: DocPage[] = [
         title: "Before you begin",
         blocks: [
           p(
-            "The default workspace is ~/misty-org. It contains sibling misty/, misty-server/, misty-website/, and misty-cli/ repositories, and misty validates their project markers before running a workflow.",
+            "The default workspace is ~/misty-org. It contains sibling misty/, misty-server/, misty-website/, misty-extensions/, and misty-cli/ repositories, and misty validates their project markers before running a workflow.",
           ),
           table(
             ["Tool", "Used for"],
@@ -239,7 +239,7 @@ export const startPages: DocPage[] = [
         blocks: [
           code("misty check all"),
           p(
-            "This is intentionally thorough. It runs the app’s npm and Rust checks, followed by Go, PostgreSQL, container-contract, collaboration Worker, and agent runtime checks. Use check app or check server while iterating on one repository.",
+            "This is intentionally thorough. It checks the app, server, website, extensions, and CLI in sequence. Use a named target while iterating on one repository.",
           ),
         ],
       },
