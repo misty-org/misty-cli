@@ -1,160 +1,164 @@
-# Misty
+# misty
 
-Misty is a React product with native Tauri shells for desktop and Apple mobile devices, plus a Rust core and an embedded direct cloud-storage library. Desktop keeps the split-panel workspace; the universal iPhone/iPad app projects the same tabs into a touch-first, single-surface shell. Its browser build uses cloud-backed features while gating local-device capabilities. Android tablet packaging remains available, but Android phone hardening is outside the current mobile release.
+`misty` is the development and release interface for the Misty repositories.
+Desktop commands use Tauri's operating-system WebView and do not prepare or bundle a separate browser runtime.
 
-## Repository layout
+## Install and start Misty
 
-- `src/application/` — bootstrap, routing, layouts, providers, telemetry lifecycle, and error boundaries.
-- `src/features/` — product-owned UI, hooks, types, and Zustand state. A feature exposes its intentional public API from `index.ts` and owns its implementation details.
-- `src/api/` — neutral authenticated Misty client and domain-specific endpoint modules. Space-only connectivity policy remains inside `src/api/spaces/`.
-- `src/native/` — small shared Tauri/OS integrations. Desktop-only filesystem IPC lives with the Files feature at `src/features/files/native.ts`.
-- `src/telemetry/` — error reporting and product telemetry.
-- `src/shared/` — generic UI, hooks, utilities, drag infrastructure, and assets with no feature or native-runtime knowledge.
-- `src/styles/` — global styling and design tokens.
-- `src/tests/` — test setup and architecture contracts only; behavior tests are colocated with their source as `*.test.ts` or `*.test.tsx` rather than placed in `__tests__` folders.
-- `src-tauri/` — Rust desktop application and tracked iOS/Android platform projects. Its source is layered as `app/` (Tauri commands/runtime), `domain/` (business models and workflows), `infra/` (storage, network, OS adapters), `platform/` (Tauri and desktop integration), and `telemetry/`.
-- `src-tauri/src/infra/direct_cloud.rs` — native Google Drive, Dropbox, and Microsoft OneDrive client runtime.
-- `src/tests/contracts/` — executable architecture, source-size, readability, and UI contracts.
-
-## Setup
-
-Desktop Browser tabs use Tauri child WebViews and the operating system's WebView runtime: WebKit on macOS and Linux, and WebView2 on Windows. Misty does not download or bundle a separate browser engine. Linux development and CI require the WebKitGTK 4.1 development packages for the distribution.
-
-From the repository root:
+From the Misty repository root:
 
 ```sh
-npm ci
+cargo install --path cli --locked
+misty setup
+misty desktop dev
 ```
 
-The optional `misty` developer CLI now lives in the separate
-`misty-org/misty-cli` repository.
-
-The app reads only the root `.env` for every target, including native builds and
-local app preparation. Shell and CI variables override file values. Mode-specific
-and local override files are ignored. Only `VITE_` variables and the explicit
-public configuration aliases are exposed to the frontend. `MISTY_APPS_DIRECTORY`
-and `VITE_MISTY_APPS_DIRECTORY` both select the local Apps checkout.
-
-## Common commands
+Start the website with:
 
 ```sh
-npm run dev
-npm run dev:mobile
-npm run dev:web
-npm run tauri -- build
-npm run build:mobile
-npm run build:android
-npm run build:web
+misty website dev
 ```
 
-Official app source lives in the adjacent `misty-apps/apps/<id>` folders. Each
-app has an `index.tsx` component entry and its view/runtime source. The host keeps
-shared UI, API adapters, native infrastructure, and integration tests; source
-aliases and TypeScript paths bridge the two checkouts. Run `npm run build:apps --
-<id>` from `misty-apps` to rebuild a local app with the host's shared tooling.
-
-Desktop development discovers `~/misty-org/misty-apps` (or an adjacent
-`misty-apps` checkout). Set `VITE_MISTY_APPS_DIRECTORY=~/path/to/misty-apps`
-in your environment or `.env` to select another checkout.
-Local desktop apps run directly from `.build/official-apps/<id>/desktop`;
-startup builds missing components without signing, zipping, or extracting them.
-Rebuild a changed app with `npm run build:official-apps -- <id>` and reload the
-host. The server still controls installation grants and permissions. In dev
-mode the local directory determines the component source, even when its version
-differs from the server catalog. A missing local build reports an error instead
-of falling back to a published download. Without a local repo, desktop uses
-published downloads from `https://apps.mistysys.com`. Production builds always
-use published packages and signature verification.
-
-The Store synchronizes its product-neutral extension contract and shared
-artwork/verification primitives from the adjacent `misty-apps/interface`
-directory before every development or build target. If the repositories are not
-adjacent, set `MISTY_STORE_DIR`; otherwise the synchronizer reads the
-published interface from GitHub. Run `npm run check:extension-interface` to
-detect drift without changing generated files.
-
-The web build requires `MISTY_PUBLIC_API_URL` to point at the public
-Misty API base (for example, `https://api.mistysys.com/v1`). The browser sends
-the server's HttpOnly session cookie with credentialed API requests; it does
-not persist the desktop bearer token. The API must explicitly allow the web
-origin, such as `https://app.mistysys.com`.
-
-## Cloudflare Workers
-
-The Worker is declared in `wrangler.jsonc` as `misty-web-app`; it serves the web
-build's `dist/` output as static assets and falls back to `index.html` for SPA
-routes. Connect this repository to Cloudflare Workers Builds, then configure:
-
-- Production branch: your default branch.
-- Root directory: `.`.
-- Build command: `npm run build:web`.
-- Deploy command: `npx wrangler deploy`.
-- Build environment variable: `MISTY_PUBLIC_API_URL=https://api.mistysys.com/v1`.
-- Custom domain: `app.mistysys.com`.
-
-Once the Git repository is connected in Workers Builds, every push to the
-production branch builds and deploys the browser companion automatically.
-Preview branches can use the same build with a preview API endpoint when one
-is available.
-
-The separate `dev` Wrangler environment deploys as `misty-web-app-dev` on
-`dev-app.mistysys.com`. Build it against the development API and deploy it with:
+Start the documentation site with:
 
 ```sh
-MISTY_PUBLIC_API_URL=https://dev-api.mistysys.com/v1 npm run deploy:web:dev
+misty docs dev
 ```
 
-For automatic development deployments, connect `misty-web-app-dev` to the
-development branch in Workers Builds with the same root and build command,
-set `MISTY_PUBLIC_API_URL=https://dev-api.mistysys.com/v1`, and use
-`npx wrangler deploy --env dev` as the deploy command.
-
-The production API must allow `https://app.mistysys.com` in
-`MISTY_ALLOWED_ORIGINS`; see the Misty Server production environment template.
-The development API must likewise allow `https://dev-app.mistysys.com`.
-
-Use the Tauri desktop runner when you need native app behavior:
+On macOS, prepare and run the Apple mobile app with:
 
 ```sh
-npm run tauri -- dev
+misty mobile doctor
+misty mobile devices
+misty mobile open
+misty mobile setup
+misty mobile dev --open
 ```
 
-For side-by-side local auth/session testing, start one Tauri instance per profile in separate terminals:
+After Xcode signing is configured, launch a connected device directly by name:
 
 ```sh
-misty desktop dev --profile owner
-misty desktop dev --profile collaborator
+misty mobile dev --device "My iPhone"
 ```
 
-Each profile gets a separate app identifier, browser storage, and auth vault entry. The launcher also creates `~/.misty/cli/profiles/<profile>` for development-only session metadata, while Misty's normal files, notes, cache, and database stay rooted in `~/.misty`.
+That command discovers the Mac's LAN address, selects an available development
+port, starts Vite and Tauri, builds and installs Misty, and keeps hot reload
+running. It uses Apple's CoreDevice path automatically for paired wireless
+iPhones and exits immediately with an unlock instruction when the device is
+locked. The mobile command also starts the local server stack, so it is the only
+command needed for an ordinary iPhone development session. Desktop and website
+development servers can remain open.
 
-The existing `mobile` build mode is the universal iOS packaging target for iPhone and iPad on iOS 15+. It mounts `MobileLayout`, preserves desktop pane and virtual-window state, and presents one active workspace surface at a time. Downloadable extensions and the Store are desktop-only. Android packages currently retain their existing tablet-oriented packaging constraints.
-
-Browser agent access is device-local and opt-in per tab. Selecting an Agent creates a visible, revocable eight-hour grant for inspect, navigate, click, and download-status tools; grants never survive an app restart. External pages receive no Tauri API permissions, and downloads are assigned collision-safe names in the operating system Downloads folder by the native WebView handler.
-
-Desktop cleanup, icons, Windows staging, and manual releases are owned by the
-separate `misty-cli` repository. Its Apple-first mobile commands cover Xcode
-readiness, device discovery, setup, development, device runs, simulator builds,
-and signed exports. Run `misty mobile --help` for the complete option reference.
-Android's native project remains available through the standard Tauri CLI.
-
-## Quality checks
+Misty contributors working on the first-party Apps can compile, development-sign,
+and validate all official packages explicitly:
 
 ```sh
-npm run check:format
-npm run check
-cd src-tauri && cargo fmt --check && cargo check && cargo test
+misty apps official build
 ```
 
-`npm run format` formats frontend source with Prettier. Vitest enforces the repository's readability, source-size, and UI architecture contracts.
+Desktop development builds requested apps on demand. Release packaging is explicit.
 
-All hand-written frontend source is limited to 500 lines. Lint findings and frontend file-size exceptions have no migration baseline.
-
-## Generated-file cleanup
+The CLI discovers the current Misty checkout, including when run from a nested directory. Apps and the CLI live in `apps/` and `cli/`. Optional server and website repositories can live next to the checkout. Configure a fallback location with:
 
 ```sh
+misty configure --workspace /path/to/misty-org
+```
+
+## Commands
+
+```sh
+misty doctor
+misty setup
+misty sdk build
+misty sdk check
+misty apps build planner --desktop-only
+misty apps package planner
+misty check tasks
+misty check app
+misty check server
+misty check website
+misty check extensions
+misty check cli
+misty check all
+
+misty env init dev
+misty env init prod
+misty env status dev
+misty env check dev
+misty env check prod
+
+misty home generate
+misty home generate --destination ./portable/.misty --source ~/.misty
+misty home check
+
+misty apps official build
+
+misty desktop dev
+misty desktop dev --profile owner --route /spaces
+misty desktop build
 misty desktop clean
 misty desktop clean --apply
+misty desktop icons sync
+
+misty mobile doctor
+misty mobile devices
+misty mobile open
+misty mobile setup
+misty mobile dev --open
+misty mobile dev --device "My iPhone"
+misty mobile run --device "My iPhone" --release
+misty mobile build --target simulator --no-sign
+misty mobile build --build-number 42 --export-method app-store-connect
+
+misty docs dev
+misty docs build
+misty website dev
+
+misty server up --detach
+misty server url
+misty server logs
+misty server down
+misty server prod check
+misty server prod up
+misty server prod logs
+misty server prod down
+
+misty release start 0.2.0
+misty release build 0.2.0
+misty release upload 0.2.0
+misty release verify 0.2.0
+misty release publish 0.2.0
 ```
 
-Cleanup targets only generated web, Rust, native-platform, design-QA, cache, and `.DS_Store` files. It skips in-use directories and never removes environment/signing files, dependencies, or tracked platform sources.
+Run `misty --help` or add `--help` after any command group for the complete
+option reference.
+
+## Misty home
+
+Desktop Misty uses `~/.misty` on macOS, Linux, and Windows instead of Library
+or AppData. Create the current layout on a device with:
+
+```sh
+misty home generate
+misty home check
+```
+
+Generation is idempotent and never replaces existing files. To prepare a
+portable seed from an existing installation, generate into a separate path:
+
+```sh
+misty home generate \
+  --source ~/.misty \
+  --destination ./portable/.misty
+```
+
+Only portable plugin web files are copied. Product assets ship inside the app.
+Databases, credentials, note attachments, mounts, caches, logs, platform
+binaries, and release keys stay device-local. Install the platform's Misty
+application separately, then place the generated `.misty` directory in the
+user's home.
+
+The CLI stores its own workspace selection in `~/.misty/cli/config.toml` and
+continues to read older platform-specific config locations during migration.
+Development-only desktop profiles live under `~/.misty/cli/profiles` so they
+cannot be mistaken for production application state.
