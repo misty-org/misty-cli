@@ -1,39 +1,20 @@
-use crate::{
-    process::{npm, CommandSpec},
-    workspace::Workspace,
-};
+//! Repository-owned TypeScript tasks under cli/tasks.
+
+use crate::{process::CommandSpec, workspace::Workspace};
 use anyhow::{bail, Result};
 use std::path::PathBuf;
-
-pub fn setup(workspace: &Workspace) -> Result<()> {
-    workspace.validate()?;
-    let version = CommandSpec::new("node")
-        .args(["--version"])
-        .capture(&workspace.misty)?;
-    let version = version.trim().trim_start_matches('v');
-    let mut parts = version
-        .split('.')
-        .filter_map(|part| part.parse::<u32>().ok());
-    let major = parts.next().unwrap_or(0);
-    let minor = parts.next().unwrap_or(0);
-    if major < 24 || (major == 24 && minor < 12) {
-        bail!("Misty requires Node.js 24.12 or newer; found {version}");
-    }
-    CommandSpec::new(npm()).args(["ci"]).run(&workspace.misty)
-}
 
 // Executable tasks only; imported helpers and test fixtures are not commands.
 const TASKS: &[&str] = &[
     "run-signed-desktop",
     "run-tool",
     "tauri",
-    "workspace-pane-lifecycle",
     "release/setup-keys",
 ];
 
 /// Tooling that uses Vite/Node APIs stays in TypeScript under cli/tasks.
 /// Only repository-owned tasks may be selected; arguments remain separate OS arguments.
-pub fn task(workspace: &Workspace, name: &str, arguments: &[String]) -> Result<()> {
+pub fn run(workspace: &Workspace, name: &str, arguments: &[String]) -> Result<()> {
     workspace.validate()?;
     let root = workspace.cli.join("tasks").canonicalize()?;
     let path = task_path(&root, name)?;
@@ -61,7 +42,7 @@ fn task_path(root: &std::path::Path, name: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-pub fn tasks(workspace: &Workspace) -> Result<()> {
+pub fn list(workspace: &Workspace) -> Result<()> {
     workspace.validate()?;
     for name in TASKS {
         println!("{name}");
