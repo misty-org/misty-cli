@@ -1,0 +1,50 @@
+// Creates the updater signing key once, or checks the one restored from backup, and records its
+// public half in misty's release trust and Tauri config. Run from misty-cli: node tasks/release-keys.ts
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { resolve } from "node:path";
+
+const cli = resolve(import.meta.dirname, "..");
+const misty = resolve(process.env.MISTY_ROOT ?? resolve(cli, ".."), "misty");
+if (!existsSync(resolve(misty, "src-tauri/tauri.conf.json"))) {
+  throw new Error(`misty was not found at ${misty}; check it out beside misty-cli or set MISTY_ROOT.`);
+}
+
+const keys = resolve(homedir(), ".config/misty-release");
+mkdirSync(keys, { recursive: true, mode: 0o700 });
+chmodSync(keys, 0o700);
+const updaterPath = resolve(keys, "updater.key");
+const trustPath = resolve(misty, "release/trust.json");
+if (existsSync(trustPath) && !existsSync(updaterPath)) {
+  throw new Error("Restore the release updater key from your secure backup.");
+}
+if (!existsSync(updaterPath)) {
+  execFileSync(resolve(misty, "node_modules/.bin/tauri"), ["signer", "generate", "--ci", "-w", updaterPath], {
+    stdio: "ignore",
+  });
+}
+chmodSync(updaterPath, 0o600);
+const updaterPublicKey = readFileSync(`${updaterPath}.pub`, "utf8").trim();
+if (existsSync(trustPath) && JSON.parse(readFileSync(trustPath, "utf8")).updaterPublicKey !== updaterPublicKey) {
+  throw new Error("Local updater key does not match committed release trust.");
+}
+mkdirSync(resolve(misty, "release"), { recursive: true });
+writeFileSync(trustPath, JSON.stringify({ updaterPublicKey }, null, 2) + "\n");
+const configPath = resolve(misty, "src-tauri/tauri.conf.json");
+const config = JSON.parse(readFileSync(configPath, "utf8"));
+config.plugins.updater.pubkey = updaterPublicKey;
+writeFileSync(configPath, JSON.stringify(config, null, 2) + "\n");
+
+const envDirectory = resolve(cli, ".env");
+mkdirSync(envDirectory, { recursive: true, mode: 0o700 });
+const envPath = resolve(envDirectory, "release.env");
+const existing = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
+const retained = existing
+  .split("\n")
+  .filter((line) => !/^TAURI_(SIGNING_PRIVATE_KEY|UPDATER_PUBLIC_KEY)=/.test(line));
+retained.push(`TAURI_SIGNING_PRIVATE_KEY=${JSON.stringify(updaterPath)}`);
+retained.push(`TAURI_UPDATER_PUBLIC_KEY=${JSON.stringify(updaterPublicKey)}`);
+writeFileSync(envPath, retained.filter(Boolean).join("\n") + "\n", { mode: 0o600 });
+chmodSync(envPath, 0o600);
+console.log(`Release keys match committed release trust. Settings saved to ${envPath}.`);
