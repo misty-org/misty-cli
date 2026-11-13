@@ -26,6 +26,16 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "server", "down", "--volumes"],
         vec!["misty", "server", "worker", "generate-secrets"],
         vec!["misty", "server", "r2", "configure-cors", "--apply"],
+        vec!["misty", "server", "test"],
+        vec!["misty", "server", "test", "--isolated", "./test/...", "-run", "Name"],
+        vec!["misty", "server", "goose", "status"],
+        vec!["misty", "server", "stack-test"],
+        vec!["misty", "hook", "install"],
+        vec!["misty", "hook", "pre-commit"],
+        vec!["misty", "hook", "pre-push", "origin", "git@github.com:misty-org/misty.git"],
+        vec!["misty", "hook", "run", "frontend", "scripts"],
+        vec!["misty", "cloud", "release", "0.1.0"],
+        vec!["misty", "cloud", "prod", "enable-writer", "--yes"],
     ] {
         Cli::try_parse_from(arguments).unwrap();
     }

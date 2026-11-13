@@ -33,6 +33,12 @@ mod secrets;
 use secrets::*;
 mod r2;
 pub use r2::*;
+mod goose;
+pub use goose::goose;
+mod stack_test;
+pub use stack_test::stack_test;
+mod test_db;
+pub use test_db::test;
 #[cfg(test)]
 mod tests;
 

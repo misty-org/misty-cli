@@ -9,9 +9,11 @@ use crate::{
 };
 
 pub fn release(workspace: &Workspace) -> Result<()> {
-    CommandSpec::new("bash")
-        .args([".githooks/checks.sh", "release"])
-        .run(&workspace.misty)
+    let names = ["secrets", "scripts", "rust-desktop", "frontend", "desktop-windows"];
+    for name in names {
+        crate::hooks::Repo::App.run(&workspace.misty, name)?;
+    }
+    Ok(())
 }
 
 pub fn all(workspace: &Workspace) -> Result<()> {
@@ -110,7 +112,7 @@ pub fn server(workspace: &Workspace) -> Result<()> {
         .args(["test", "-p", "1", "./...", "-count=1"])
         .run(&workspace.server)?;
     #[cfg(not(windows))]
-    CommandSpec::new("./test.sh").run(&workspace.server)?;
+    crate::server::test(&workspace.server, &[])?;
 
     let worker = workspace.server.join("services/journal-collab");
     CommandSpec::new(npm()).args(["ci"]).run(&worker)?;

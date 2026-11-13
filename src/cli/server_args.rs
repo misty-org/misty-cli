@@ -41,6 +41,22 @@ pub(super) enum ServerCommand {
         #[arg(long, default_value_t = 100)]
         tail: u32,
     },
+    /// Run the Go suite against a test database in the development stack's PostgreSQL.
+    Test {
+        /// Use a disposable PostgreSQL container instead, as the git hooks do.
+        #[arg(long)]
+        isolated: bool,
+        /// Arguments for go test, such as ./internal/... -run Name.
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        arguments: Vec<String>,
+    },
+    /// Run goose on the server's migrations, e.g. `misty server goose up`.
+    Goose {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+        arguments: Vec<String>,
+    },
+    /// Run the whole production stack against a fake Cloudflare API, then remove it.
+    StackTest,
     Worker {
         #[command(subcommand)]
         command: WorkerCommand,

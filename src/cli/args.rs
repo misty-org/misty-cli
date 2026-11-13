@@ -23,6 +23,10 @@ pub(super) enum Command {
     Env(Env),
     /// Run a repository's checks.
     Check(Check),
+    /// The git hooks' checks: install them, or run a repository's suites by hand.
+    Hook(crate::hooks::Hook),
+    /// Release misty-cloud or operate its production billing stack.
+    Cloud(crate::cloud::Cloud),
     /// Build the app, step by step.
     Build,
     /// Run the desktop app in development, clean its build output or update its icons.

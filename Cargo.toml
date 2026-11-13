@@ -23,6 +23,9 @@ url = "2.5.4"
 walkdir = "2.5.0"
 cliclack = "0.5.7"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Match the desktop's development storage policy for this standalone tool.
 [profile.dev]
 debug = 1

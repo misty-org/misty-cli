@@ -7,7 +7,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct CommandSpec {
     program: OsString,
     args: Vec<OsString>,
@@ -122,6 +122,46 @@ impl CommandSpec {
         Ok(())
     }
 
+    /// Runs it with `input` on stdin, failing when it exits unsuccessfully.
+    pub fn run_with_input(&self, directory: &Path, input: &[u8]) -> Result<()> {
+        use std::io::Write;
+        eprintln!("> {}", self.display());
+        let mut child = self
+            .command(directory)
+            .stdin(Stdio::piped())
+            .spawn()
+            .with_context(|| format!("could not start {}", self.display()))?;
+        child
+            .stdin
+            .take()
+            .context("missing stdin")?
+            .write_all(input)?;
+        let status = child.wait()?;
+        if !status.success() {
+            bail!("{} exited with {status}", self.display());
+        }
+        Ok(())
+    }
+
+    /// Runs it quietly and reports only whether it succeeded.
+    pub fn succeeds(&self, directory: &Path) -> bool {
+        self.command(directory)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|status| status.success())
+    }
+
+    /// Runs it with inherited output and returns its exit code (1 when a signal ended it).
+    pub fn exit_code(&self, directory: &Path) -> Result<i32> {
+        eprintln!("> {}", self.display());
+        let status = self
+            .command(directory)
+            .status()
+            .with_context(|| format!("could not start {}", self.display()))?;
+        Ok(status.code().unwrap_or(1))
+    }
+
     pub fn capture(&self, directory: &Path) -> Result<String> {
         let output = self
             .command(directory)
@@ -149,7 +189,8 @@ impl CommandSpec {
             .join(" ")
     }
 
-    fn command(&self, directory: &Path) -> Command {
+    /// The process this describes, for callers that need its pipes or its process group.
+    pub(crate) fn command(&self, directory: &Path) -> Command {
         let mut command = Command::new(&self.program);
         command.args(&self.args).current_dir(directory);
         for name in &self.removed_environment {

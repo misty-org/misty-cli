@@ -719,6 +719,7 @@ dependencies = [
  "dirs",
  "dotenvy",
  "ed25519-dalek",
+ "libc",
  "minisign-verify",
  "rand",
  "serde",

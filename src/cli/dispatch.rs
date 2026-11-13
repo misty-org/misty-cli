@@ -60,6 +60,8 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
             CheckTarget::Cli => checks::cli(&settings.workspace),
             CheckTarget::All => checks::all(&settings.workspace),
         },
+        Command::Hook(hook) => crate::hooks::dispatch(&settings.workspace, hook.command),
+        Command::Cloud(cloud) => crate::cloud::dispatch(&settings.workspace, cloud.command),
         Command::Build => crate::guide::build(&settings.workspace),
         Command::Desktop(command) => match command.command {
             DesktopCommand::Dev { route } => desktop::dev(&settings.workspace, route.as_deref()),
@@ -100,6 +102,17 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
                 follow,
                 tail,
             } => server::logs(&settings.workspace, service.as_deref(), follow, tail),
+            ServerCommand::Test {
+                isolated: true,
+                arguments,
+            } => crate::hooks::run_isolated_server_tests(&settings.workspace.server, &arguments),
+            ServerCommand::Test { arguments, .. } => {
+                server::test(&settings.workspace.server, &arguments)
+            }
+            ServerCommand::Goose { arguments } => {
+                server::goose(&settings.workspace.server, &arguments)
+            }
+            ServerCommand::StackTest => server::stack_test(&settings.workspace.server),
             ServerCommand::Worker { command } => match command {
                 WorkerCommand::GenerateSecrets => {
                     server::generate_worker_secrets(&settings.workspace)
@@ -120,7 +133,8 @@ const GUIDED_ENVIRONMENT: &[&str] = &["common.env", "release.env"];
 
 pub(super) fn load_command_environment(command: &Command, settings: &Settings) -> Result<()> {
     let files: &[&str] = match command {
-        Command::Env(_) => &[],
+        // Hooks and production run on any checkout with nothing configured.
+        Command::Env(_) | Command::Hook(_) | Command::Cloud(_) => &[],
         Command::Setup(options)
             if matches!(options.component, crate::setup::Component::Cloudflare) =>
         {
@@ -145,8 +159,14 @@ pub(super) fn load_command_environment(command: &Command, settings: &Settings) -
         Command::Check(_) | Command::Website(_) => &["common.env"],
     };
     crate::config::load_cli_environment(&settings.workspace, files)?;
-    if let Command::Server(_) = command {
-        environment::apply(&settings.workspace)?;
+    // Tests and goose choose their own database settings; the stack's must not leak in.
+    if let Command::Server(server) = command {
+        if !matches!(
+            server.command,
+            ServerCommand::Test { .. } | ServerCommand::Goose { .. } | ServerCommand::StackTest
+        ) {
+            environment::apply(&settings.workspace)?;
+        }
     }
     Ok(())
 }

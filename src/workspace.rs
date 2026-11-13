@@ -9,6 +9,7 @@ pub struct Workspace {
     pub website: PathBuf,
     pub features: PathBuf,
     pub cli: PathBuf,
+    pub cloud: PathBuf,
 }
 
 impl Workspace {
@@ -47,6 +48,7 @@ impl Workspace {
             cli: sibling("misty-cli", "Cargo.toml"),
             server: sibling("misty-server", "go.mod"),
             website: root.join("misty-website"),
+            cloud: root.join("misty-cloud"),
             misty,
             root,
         })
