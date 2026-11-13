@@ -21,7 +21,10 @@ pub(super) fn find(bundle: &Path) -> Option<PathBuf> {
         .ok()?
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.extension().is_some_and(|extension| extension == "AppImage"))
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "AppImage")
+        })
         .max_by_key(|path| path.metadata().and_then(|file| file.modified()).ok())
 }
 
@@ -57,7 +60,10 @@ pub(super) fn prune_wayland(appimage: &Path) -> Result<Vec<String>> {
         .run(work.path())?;
     let root = work.path().join("squashfs-root");
     if !root.is_dir() {
-        bail!("extracting {} produced no squashfs-root", appimage.display());
+        bail!(
+            "extracting {} produced no squashfs-root",
+            appimage.display()
+        );
     }
     let libraries = root.join("usr/lib");
     let mut removed = Vec::new();
@@ -142,7 +148,13 @@ mod tests {
 
     #[test]
     fn the_architecture_comes_from_the_file_name() {
-        assert_eq!(architecture(Path::new("Misty_0.1.0_amd64.AppImage")), "x86_64");
-        assert_eq!(architecture(Path::new("Misty_0.1.0_aarch64.AppImage")), "aarch64");
+        assert_eq!(
+            architecture(Path::new("Misty_0.1.0_amd64.AppImage")),
+            "x86_64"
+        );
+        assert_eq!(
+            architecture(Path::new("Misty_0.1.0_aarch64.AppImage")),
+            "aarch64"
+        );
     }
 }

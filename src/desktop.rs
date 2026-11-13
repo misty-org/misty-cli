@@ -35,22 +35,15 @@ pub fn dev(workspace: &Workspace, route: Option<&str>) -> Result<()> {
     let config = json!({
         "build": {
             "devUrl": format!("http://127.0.0.1:{port}{route}"),
-            "beforeDevCommand": "node cli/tasks/run-tool.ts vite --mode desktop"
         }
     });
     fs::write(&config_path, serde_json::to_vec_pretty(&config)?)?;
 
-    // Node directly, like `beforeDevCommand` above, not through npm: npm is a batch file on
-    // Windows, and Ctrl+C leaves its cmd.exe asking "Terminate batch job (Y/N)?" on the terminal
-    // after Misty has exited. Same command as the `tauri` script in package.json.
+    // Node directly, not through npm: npm is a batch file on Windows, and Ctrl+C leaves its
+    // cmd.exe asking "Terminate batch job (Y/N)?" on the terminal after Misty has exited. Same
+    // command as the `tauri` script in misty's package.json.
     let mut command = CommandSpec::new("node")
-        .args([
-            "--disable-warning=ExperimentalWarning",
-            "--experimental-strip-types",
-            "cli/tasks/tauri.ts",
-            "dev",
-            "--config",
-        ])
+        .args(["tasks/tauri.ts", "dev", "--config"])
         .arg(config_path.as_os_str())
         .env("MISTY_DESKTOP_DEV_PORT", port.to_string());
     for (name, value) in development_addresses(workspace) {

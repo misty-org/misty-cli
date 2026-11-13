@@ -36,7 +36,7 @@ fn valid_version(version: &str) -> bool {
         && parts
             .iter()
             .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
-        && prerelease.map_or(true, |text| {
+        && prerelease.is_none_or(|text| {
             !text.is_empty()
                 && text
                     .bytes()

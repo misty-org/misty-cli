@@ -44,10 +44,6 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
             EnvCommand::Check => environment::check(&settings.workspace),
             EnvCommand::Status => environment::status(&settings.workspace),
         },
-        Command::Home(command) => match command.command {
-            HomeCommand::Generate { destination } => home::generate(destination.as_deref()),
-            HomeCommand::Check { path } => home::check(path.as_deref()),
-        },
         Command::Check(command) => match command.target {
             CheckTarget::App => checks::app(&settings.workspace),
             CheckTarget::Scripts => crate::process::CommandSpec::new(crate::process::npm())
@@ -60,14 +56,13 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
             }
             CheckTarget::Website => checks::website(&settings.workspace),
             CheckTarget::Features => checks::features(&settings.workspace),
+            CheckTarget::Acceptance => checks::acceptance(&settings.workspace),
             CheckTarget::Cli => checks::cli(&settings.workspace),
             CheckTarget::All => checks::all(&settings.workspace),
         },
         Command::Build => crate::guide::build(&settings.workspace),
         Command::Desktop(command) => match command.command {
-            DesktopCommand::Dev { route } => {
-                desktop::dev(&settings.workspace, route.as_deref())
-            }
+            DesktopCommand::Dev { route } => desktop::dev(&settings.workspace, route.as_deref()),
             DesktopCommand::Clean { apply } => desktop::clean(&settings.workspace, apply),
             DesktopCommand::Icons { command } => match command {
                 IconCommand::Sync { source } => {
@@ -76,10 +71,6 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
             },
         },
 
-        Command::Docs(command) => match command.command {
-            DocsCommand::Dev => website::docs(&settings.workspace),
-            DocsCommand::Build => website::docs_build(&settings.workspace),
-        },
         Command::Website(command) => match command.command {
             WebsiteCommand::Dev => website::dev(&settings.workspace),
         },
@@ -129,7 +120,7 @@ const GUIDED_ENVIRONMENT: &[&str] = &["common.env", "release.env"];
 
 pub(super) fn load_command_environment(command: &Command, settings: &Settings) -> Result<()> {
     let files: &[&str] = match command {
-        Command::Env(_) | Command::Home(_) => &[],
+        Command::Env(_) => &[],
         Command::Setup(options)
             if matches!(options.component, crate::setup::Component::Cloudflare) =>
         {
@@ -151,7 +142,7 @@ pub(super) fn load_command_environment(command: &Command, settings: &Settings) -
             }
             _ => &["common.env"],
         },
-        Command::Check(_) | Command::Docs(_) | Command::Website(_) => &["common.env"],
+        Command::Check(_) | Command::Website(_) => &["common.env"],
     };
     crate::config::load_cli_environment(&settings.workspace, files)?;
     if let Command::Server(_) = command {

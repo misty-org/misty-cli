@@ -10,19 +10,16 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "doctor"],
         vec!["misty", "env", "init"],
         vec!["misty", "env", "status"],
-        vec!["misty", "home", "generate"],
-        vec!["misty", "home", "generate", "--destination", "/tmp/.misty"],
-        vec!["misty", "home", "check"],
         vec!["misty", "check", "all"],
         vec!["misty", "check", "app"],
         vec!["misty", "check", "server"],
         vec!["misty", "check", "website"],
         vec!["misty", "check", "features"],
+        vec!["misty", "check", "acceptance"],
         vec!["misty", "check", "cli"],
         vec!["misty", "desktop", "dev", "--route", "/spaces/demo"],
         vec!["misty", "desktop", "clean", "--apply"],
         vec!["misty", "desktop", "icons", "sync"],
-        vec!["misty", "docs", "dev"],
         vec!["misty", "website", "dev"],
         vec!["misty", "server", "up", "--no-build"],
         vec!["misty", "server", "url"],
@@ -75,9 +72,4 @@ fn destructive_flags_are_never_implicit() {
             command: R2Command::ConfigureCors { apply: false }
         }
     ));
-}
-
-#[test]
-fn docs_requires_an_explicit_subcommand() {
-    assert!(Cli::try_parse_from(["misty", "docs"]).is_err());
 }

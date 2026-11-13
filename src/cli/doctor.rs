@@ -42,7 +42,7 @@ pub(super) fn doctor(settings: &Settings) -> Result<()> {
 pub(super) fn verify_rust_targets(settings: &Settings) -> Result<()> {
     let installed = crate::process::CommandSpec::new("rustup")
         .args(["target", "list", "--installed"])
-        .capture(&settings.workspace.cli)?;
+        .capture(&settings.workspace.misty)?;
     let required: &[&str] = if cfg!(target_os = "macos") {
         &["aarch64-apple-darwin", "x86_64-apple-darwin"]
     } else if cfg!(windows) {

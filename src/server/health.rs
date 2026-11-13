@@ -9,13 +9,9 @@ pub fn status(workspace: &Workspace) -> Result<()> {
         let service = row["Service"].as_str().unwrap_or("unknown");
         let state = row["State"].as_str().unwrap_or("unknown");
         let health = row["Health"].as_str().unwrap_or("");
-        // Successful setup/deployment jobs are not ongoing server services.
-        // Keep incomplete or failed jobs visible so their logs remain discoverable.
-        let is_job = matches!(
-            service,
-            "setup" | "dev-init" | "migrate" | "database-permissions" | "cloudflare-deploy"
-        );
-        if is_job && state == "exited" && row["ExitCode"].as_i64() == Some(0) {
+        // A finished setup job is not an ongoing server service. Keep an
+        // incomplete or failed one visible so its logs stay easy to find.
+        if service == "setup" && state == "exited" && row["ExitCode"].as_i64() == Some(0) {
             continue;
         }
         let status = if !health.is_empty() { health } else { state };
@@ -94,9 +90,6 @@ pub(super) fn validate_health(rows: &[serde_json::Value]) -> Result<()> {
         }
     }
     for row in rows {
-        if row["Service"] == "cloudflare-deploy" {
-            continue;
-        }
         if row["State"] == "exited" && row["ExitCode"].as_i64().unwrap_or(0) != 0 {
             bail!("{} failed; inspect its service logs", row["Service"]);
         }

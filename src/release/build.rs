@@ -216,7 +216,9 @@ fn updater_pair(root: &Path, platform: &str) -> Result<(String, String)> {
             match platform {
                 MACOS_PLATFORM => path.to_string_lossy().ends_with(".app.tar.gz"),
                 // Tauri's Linux updater replaces the AppImage in place.
-                LINUX_PLATFORM => path.extension().is_some_and(|extension| extension == "AppImage"),
+                LINUX_PLATFORM => path
+                    .extension()
+                    .is_some_and(|extension| extension == "AppImage"),
                 _ => path.extension().is_some_and(|extension| extension == "exe"),
             }
         })

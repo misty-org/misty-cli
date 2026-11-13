@@ -20,7 +20,7 @@ pub(super) fn check(workspace: &Workspace) -> Result<()> {
     let values: BTreeMap<_, _> = env::vars().collect();
     let missing = missing_inputs(&required, &values);
     if !missing.is_empty() {
-        bail!("Release configuration is incomplete: {}. Set these once in cli/.env/release.env (mode 600); values are never printed.", missing.join(", "));
+        bail!("Release configuration is incomplete: {}. Set these once in misty-cli/.env/release.env (mode 600); values are never printed.", missing.join(", "));
     }
     config::build()?;
     config::public_environment()?;

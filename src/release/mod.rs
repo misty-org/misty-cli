@@ -34,7 +34,7 @@ pub use publish::publish;
 pub use stage::{stage, Stage};
 pub use state::normalize_version;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReleaseOs {
     Macos,
     Windows,
@@ -133,7 +133,7 @@ pub fn build(workspace: &Workspace, raw_version: &str, dry_run: bool) -> Result<
         std::env::set_var(name, value);
     }
     CommandSpec::new(npm())
-        .args(["run", "build:desktop"])
+        .args(["run", "build"])
         .run(&workspace.misty)?;
     // Shared metadata comes from the macOS build when the release has one.
     let builds_shared = platforms.contains(&MACOS_PLATFORM)

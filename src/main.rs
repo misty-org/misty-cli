@@ -8,7 +8,6 @@ mod desktop;
 mod diagnostics;
 mod environment;
 mod guide;
-mod home;
 mod process;
 mod release;
 mod server;

@@ -2,11 +2,9 @@
 
 use super::*;
 
+// Windows needs nothing here: a file under the user profile is readable only by its owner.
+#[cfg_attr(not(unix), allow(unused_variables))]
 pub(super) fn require_private_file(path: &Path) -> Result<()> {
-    #[cfg(windows)]
-    if !misty_credential_store::is_private_file(path) {
-        bail!("{} must be readable only by you", path.display());
-    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -21,10 +19,8 @@ pub(super) fn require_private_file(path: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg_attr(not(unix), allow(unused_variables))]
 pub(super) fn secure_directories(root: &Path) -> Result<()> {
-    // Everything below inherits the folder's owner-only access.
-    #[cfg(windows)]
-    misty_credential_store::restrict_private_directory(root)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -81,8 +77,6 @@ pub fn set(workspace: &Workspace, name: &str, value: &str) -> Result<()> {
     temporary.as_file().sync_all()?;
     temporary.persist(&path).map_err(|e| e.error)?;
     // Unix creates the temporary file private already.
-    #[cfg(windows)]
-    misty_credential_store::restrict_private_file(&path)?;
     Ok(())
 }
 
@@ -135,7 +129,7 @@ pub fn read_selected_cli_files(
             })?;
             let expected = cli_owner(&name)?;
             if expected != file {
-                bail!("{name} belongs in misty/cli/.env/{expected}, not misty/cli/.env/{file}");
+                bail!("{name} belongs in misty-cli/.env/{expected}, not misty-cli/.env/{file}");
             }
             if values.insert(name.clone(), value).is_some() {
                 bail!("{name} is defined more than once in the CLI environment");

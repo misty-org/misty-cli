@@ -50,16 +50,13 @@ pub fn desktop(workspace: &Workspace) -> Result<()> {
 fn install_desktop_dependencies(workspace: &Workspace) -> Result<()> {
     workspace.validate()?;
     let version = CommandSpec::new("node")
-        .args(["--version"])
+        .arg("--version")
         .capture(&workspace.misty)?;
-    let version = version.trim().trim_start_matches('v');
-    let mut parts = version
-        .split('.')
-        .filter_map(|part| part.parse::<u32>().ok());
-    let major = parts.next().unwrap_or(0);
-    let minor = parts.next().unwrap_or(0);
-    if major < 24 || (major == 24 && minor < 12) {
-        bail!("Misty requires Node.js 24.12 or newer; found {version}");
+    if !crate::diagnostics::version_at_least(&version, 24, 12) {
+        bail!(
+            "Misty requires Node.js 24.12 or newer; found {}",
+            version.trim()
+        );
     }
     CommandSpec::new(npm()).args(["ci"]).run(&workspace.misty)
 }

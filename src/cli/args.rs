@@ -5,6 +5,7 @@ use super::*;
 #[derive(Debug, Parser)]
 #[command(name = "misty", version, about)]
 pub struct Cli {
+    /// The folder that holds the misty checkouts. Defaults to the one around the current folder, else ~/misty-org.
     #[arg(long, global = true)]
     pub workspace: Option<PathBuf>,
     /// Leave this out to be asked what to do, one step at a time.
@@ -20,16 +21,15 @@ pub(super) enum Command {
     Doctor(crate::diagnostics::Doctor),
     /// Create and validate private runtime environments.
     Env(Env),
-    /// Generate and validate the cross-platform ~/.misty home.
-    Home(Home),
+    /// Run a repository's checks.
     Check(Check),
     /// Build the app, step by step.
     Build,
+    /// Run the desktop app in development, clean its build output or update its icons.
     Desktop(Desktop),
-    /// Run the documentation site.
-    Docs(Docs),
     /// Run the public website.
     Website(Website),
+    /// Run the local server stack.
     Server(Server),
     /// Publish a release, step by step: start it, build it on each system, make it public.
     Release(Release),
@@ -45,28 +45,6 @@ pub(super) struct Check {
 pub(super) struct Env {
     #[command(subcommand)]
     pub(super) command: EnvCommand,
-}
-
-#[derive(Debug, Args)]
-pub(super) struct Home {
-    #[command(subcommand)]
-    pub(super) command: HomeCommand,
-}
-
-#[derive(Debug, Subcommand)]
-pub(super) enum HomeCommand {
-    /// Create a deterministic, non-destructive Misty home directory.
-    Generate {
-        /// Exact output directory. Defaults to ~/.misty.
-        #[arg(long)]
-        destination: Option<PathBuf>,
-    },
-    /// Validate layout, permissions, and retired paths without displaying values.
-    Check {
-        /// Exact Misty home to validate. Defaults to ~/.misty.
-        #[arg(long)]
-        path: Option<PathBuf>,
-    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -91,6 +69,7 @@ pub(super) enum CheckTarget {
     GoSizes,
     Website,
     Features,
+    Acceptance,
     Cli,
     All,
 }
@@ -107,20 +86,6 @@ pub(super) struct Website {
     pub(super) command: WebsiteCommand,
 }
 
-#[derive(Debug, Args)]
-pub(super) struct Docs {
-    #[command(subcommand)]
-    pub(super) command: DocsCommand,
-}
-
-#[derive(Debug, Subcommand)]
-pub(super) enum DocsCommand {
-    /// Build the independently deployed documentation site.
-    Build,
-    /// Start the Vite development server.
-    Dev,
-}
-
 #[derive(Debug, Subcommand)]
 pub(super) enum WebsiteCommand {
     /// Start the Vite development server.
@@ -135,10 +100,13 @@ pub(super) enum DesktopCommand {
         #[arg(long)]
         route: Option<String>,
     },
+    /// List the build output and caches in misty that can be removed.
     Clean {
+        /// Remove them.
         #[arg(long)]
         apply: bool,
     },
+    /// Update the app's icons.
     Icons {
         #[command(subcommand)]
         command: IconCommand,
@@ -147,7 +115,9 @@ pub(super) enum DesktopCommand {
 
 #[derive(Debug, Subcommand)]
 pub(super) enum IconCommand {
+    /// Make every icon size from one .icns file.
     Sync {
+        /// The .icns to use. Defaults to src-tauri/icons/icon.icns.
         #[arg(long)]
         source: Option<PathBuf>,
     },

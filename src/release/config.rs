@@ -22,7 +22,7 @@ pub(super) fn csp() -> String {
     [
         "default-src 'self' customprotocol: asset:",
         "connect-src 'self' ipc: asset: http://asset.localhost http://ipc.localhost https: wss:",
-        "frame-src 'self' asset: http://asset.localhost customprotocol: misty-extension: http://misty-extension.localhost",
+        "frame-src 'self' asset: http://asset.localhost customprotocol:",
         "img-src 'self' asset: http://asset.localhost blob: data: https:",
         "media-src 'self' blob: asset: http://asset.localhost",
         "font-src 'self' data:",
@@ -166,6 +166,20 @@ mod tests {
                 || source.starts_with("ws://127.0.0.1")));
         assert_eq!(directive(&csp, "script-src"), vec!["'self'"]);
         assert!(!csp.contains("unsafe-eval"));
+    }
+
+    #[test]
+    fn a_release_frames_only_the_apps_own_content() {
+        let csp = csp();
+        assert_eq!(
+            directive(&csp, "frame-src"),
+            vec![
+                "'self'",
+                "asset:",
+                "http://asset.localhost",
+                "customprotocol:"
+            ]
+        );
     }
 
     #[test]

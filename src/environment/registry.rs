@@ -10,15 +10,11 @@ pub(super) struct FileSpec {
 
 /// Files that belong in the folder and aren't the CLI's to read.
 pub(super) const DEPLOYED_SERVER_FILES: [&str; 2] = ["misty.env", "mailjet.env"];
-/// No longer read: Composio runs on the person's computer on their own key. Allowed so an existing
-/// development folder still loads.
-pub(super) const RETIRED_FILES: [&str; 1] = ["composio.env"];
 
 pub(super) const FILES: &[FileSpec] = &[
     FileSpec {
         path: "runtime.env",
         names: &[
-            "AUTH_HANDOFF_START_URL",
             // Bearer token of the operator account API.
             "MISTY_OPERATOR_TOKEN",
             // Anyone may make an account.
@@ -36,20 +32,6 @@ pub(super) const FILES: &[FileSpec] = &[
             "PORT",
             "TRUST_PROXY_HEADERS",
             "TRUSTED_PROXY_CIDRS",
-            // No longer read: the server sends no email, so there are no
-            // reset or invitation links to address. Kept so existing
-            // development files still load.
-            "PASSWORD_RESET_START_URL",
-            "PASSWORD_RESET_URL",
-            "MISTY_INVITATION_URL_BASE",
-            // No longer read: agents and model calls run on the desktop
-            // Kept so existing development files
-            // still load.
-            "MISTY_DEVICE_JOBS_ENABLED",
-            "MISTY_AGENT_RUNTIME_URL",
-            "MISTY_AGENT_RUNTIME_INTERNAL_API_URL",
-            "MISTY_ALLOW_MODEL_OVERRIDE",
-            "MISTY_AI_TOOL_RESULT_EVENTS",
         ],
     },
     FileSpec {
@@ -67,9 +49,6 @@ pub(super) const FILES: &[FileSpec] = &[
             "DB_CONN_MAX_LIFETIME",
             "DB_CONN_MAX_IDLE_TIME",
             "DB_USER",
-            // No longer read: there is no workflow database. Kept so existing
-            // development files still load.
-            "AGENT_RUNTIME_DB_PASSWORD",
         ],
     },
     FileSpec {
@@ -131,27 +110,12 @@ pub(super) const FILES: &[FileSpec] = &[
         ],
     },
     FileSpec {
-        path: "crypto/devices.env",
-        names: &[
-            "MISTY_DEVICE_PAIRING_PEPPER",
-            "MISTY_DEVICE_TICKET_PREVIOUS_PUBLIC_KEYS",
-            "MISTY_DEVICE_TICKET_PRIVATE_KEY",
-        ],
-    },
-    FileSpec {
         path: "crypto/spaces.env",
         names: &["SPACE_LINK_ENCRYPTION_KEY"],
     },
     FileSpec {
         path: "crypto/services.env",
-        names: &[
-            "MISTY_AUTH_SIGNING_KEY",
-            "MISTY_AUTH_SIGNING_KEY_PREVIOUS",
-            // No longer read: a run has no server to sign its calls to. Kept so existing development
-            // files still load.
-            "MISTY_AGENT_RUNTIME_CONTROL_SECRET",
-            "MISTY_AGENT_RUNTIME_CONTROL_SECRET_PREVIOUS",
-        ],
+        names: &["MISTY_AUTH_SIGNING_KEY", "MISTY_AUTH_SIGNING_KEY_PREVIOUS"],
     },
 ];
 

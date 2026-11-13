@@ -71,24 +71,6 @@ fn environment_values_find_only_exact_active_keys() {
 }
 
 #[test]
-fn development_server_configures_connected_devices_once() {
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join(".env.dev");
-    fs::write(&path, "DB_NAME=misty\n").unwrap();
-
-    assert!(ensure_connected_devices_development_config(&path).unwrap());
-    let first = fs::read_to_string(&path).unwrap();
-    assert_eq!(
-        environment_values(&first, DEVICE_TICKET_PRIVATE_KEY).len(),
-        1
-    );
-    assert_eq!(environment_values(&first, DEVICE_PAIRING_PEPPER).len(), 1);
-
-    assert!(!ensure_connected_devices_development_config(&path).unwrap());
-    assert_eq!(fs::read_to_string(&path).unwrap(), first);
-}
-
-#[test]
 fn r2_origins_are_narrow() {
     assert!(validate_r2_origin("https://mistysys.com").is_ok());
     assert!(validate_r2_origin("tauri://localhost").is_ok());

@@ -12,14 +12,16 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    /// The misty checkout at or above `start`, or beside one of its folders.
     pub fn discover(start: &Path) -> Option<PathBuf> {
-        start
-            .ancestors()
-            .find(|path| {
-                path.join("src-tauri/tauri.conf.json").is_file()
-                    && path.join("cli/Cargo.toml").is_file()
-            })
-            .map(Path::to_path_buf)
+        let is_app = |path: &Path| path.join("src-tauri/tauri.conf.json").is_file();
+        start.ancestors().find_map(|path| {
+            if is_app(path) {
+                return Some(path.to_path_buf());
+            }
+            let sibling = path.join("misty");
+            is_app(&sibling).then_some(sibling)
+        })
     }
 
     pub fn from_root(root: PathBuf) -> Result<Self> {
@@ -32,16 +34,18 @@ impl Workspace {
         };
         let misty = Self::discover(&absolute).unwrap_or_else(|| absolute.join("misty"));
         let root = misty.parent().unwrap_or(&misty).to_path_buf();
-        // A linked worktree sits inside the checkout, so look up from it for the sibling.
-        let server = misty
-            .ancestors()
-            .map(|folder| folder.join("misty-server"))
-            .find(|folder| folder.join("go.mod").is_file())
-            .unwrap_or_else(|| root.join("misty-server"));
+        // A linked worktree sits inside the checkout, so look up from it for the siblings.
+        let sibling = |name: &str, marker: &str| {
+            misty
+                .ancestors()
+                .map(|folder| folder.join(name))
+                .find(|folder| folder.join(marker).is_file())
+                .unwrap_or_else(|| root.join(name))
+        };
         Ok(Self {
             features: misty.join("src/features"),
-            cli: misty.join("cli"),
-            server,
+            cli: sibling("misty-cli", "Cargo.toml"),
+            server: sibling("misty-server", "go.mod"),
             website: root.join("misty-website"),
             misty,
             root,
@@ -68,7 +72,7 @@ impl Workspace {
                 self.misty.join("src-tauri/tauri.conf.json"),
                 "Misty native configuration",
             ),
-            (self.cli.join("Cargo.toml"), "Misty CLI"),
+            (self.cli.join("Cargo.toml"), "misty-cli"),
         ] {
             if !path.is_file() {
                 bail!("{label} was not found at {}", path.display());
@@ -83,30 +87,39 @@ mod tests {
     use super::*;
     use std::fs;
 
-    #[test]
-    fn a_single_clone_works_from_any_package_without_optional_repositories() {
-        let temporary = tempfile::tempdir().unwrap();
-        let checkout = temporary.path().join("my-contribution");
-        for name in [
-            "package.json",
-            "src-tauri/tauri.conf.json",
-            "cli/Cargo.toml",
-            "src/shared/schemas/index.ts",
-        ] {
-            let file = checkout.join(name);
+    fn touch(root: &Path, names: &[&str]) {
+        for name in names {
+            let file = root.join(name);
             fs::create_dir_all(file.parent().unwrap()).unwrap();
             fs::write(file, "").unwrap();
         }
-        for path in [
+    }
+
+    #[test]
+    fn finds_the_app_from_its_own_folders_and_from_misty_cli() {
+        let temporary = tempfile::tempdir().unwrap();
+        let checkout = temporary.path().join("misty");
+        let cli = temporary.path().join("misty-cli");
+        touch(
             &checkout,
-            &checkout.join("cli"),
-            &checkout.join("src/shared/schemas"),
+            &[
+                "package.json",
+                "src-tauri/tauri.conf.json",
+                "src/shared/schemas/index.ts",
+            ],
+        );
+        touch(&cli, &["Cargo.toml", "src/main.rs"]);
+        for path in [
+            checkout.clone(),
+            checkout.join("src/shared/schemas"),
+            cli.clone(),
+            cli.join("src"),
         ] {
-            let workspace = Workspace::from_root(path.clone()).unwrap();
+            let workspace = Workspace::from_root(path).unwrap();
             workspace.validate().unwrap();
             assert_eq!(workspace.misty, checkout);
             assert_eq!(workspace.features, checkout.join("src/features"));
-            assert_eq!(workspace.cli, checkout.join("cli"));
+            assert_eq!(workspace.cli, cli);
             assert!(!workspace.server.exists());
         }
     }
@@ -117,23 +130,22 @@ mod tests {
         let workspace = Workspace::from_root(temporary.path().to_path_buf()).unwrap();
         assert_eq!(workspace.misty, temporary.path().join("misty"));
         assert_eq!(workspace.server, temporary.path().join("misty-server"));
+        assert_eq!(workspace.cli, temporary.path().join("misty-cli"));
         assert!(workspace.require_server().is_err());
     }
 
     #[test]
-    fn a_linked_worktree_finds_the_server_beside_the_main_checkout() {
+    fn a_linked_worktree_finds_the_siblings_beside_the_main_checkout() {
         let temporary = tempfile::tempdir().unwrap();
-        let worktree = temporary.path().join("misty/.claude/worktrees/feature");
-        for name in ["src-tauri/tauri.conf.json", "cli/Cargo.toml"] {
-            let file = worktree.join(name);
-            fs::create_dir_all(file.parent().unwrap()).unwrap();
-            fs::write(file, "").unwrap();
-        }
-        let server = temporary.path().join("misty-server");
-        fs::create_dir_all(&server).unwrap();
-        fs::write(server.join("go.mod"), "").unwrap();
+        let worktree = temporary.path().join("misty/.worktrees/feature");
+        touch(&worktree, &["src-tauri/tauri.conf.json"]);
+        touch(
+            temporary.path(),
+            &["misty-server/go.mod", "misty-cli/Cargo.toml"],
+        );
         let workspace = Workspace::from_root(worktree).unwrap();
-        assert_eq!(workspace.server, server);
+        assert_eq!(workspace.server, temporary.path().join("misty-server"));
+        assert_eq!(workspace.cli, temporary.path().join("misty-cli"));
         workspace.require_server().unwrap();
     }
 }

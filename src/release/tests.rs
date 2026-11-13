@@ -42,8 +42,7 @@ fn a_test_build_keeps_the_release_policy_without_signing() {
     assert!(build["bundle"].get("windows").is_none());
 }
 
-/// Agents run inside the app, so a build bundles no second program or its files, and the app doesn't
-/// need the JIT rights Node did.
+/// Agents run inside the app, so a build bundles no second program or its files.
 #[test]
 fn no_release_ships_node() {
     std::env::set_var("TAURI_UPDATER_PUBLIC_KEY", format!("RW{}", "a".repeat(54)));
@@ -51,9 +50,4 @@ fn no_release_ships_node() {
         assert!(build["bundle"].get("externalBin").is_none());
         assert!(build["bundle"].get("resources").is_none());
     }
-    let manifest = env!("CARGO_MANIFEST_DIR");
-    let entitlements = std::path::Path::new(manifest).join("../src-tauri/packaging/Entitlements.plist");
-    let entitlements = std::fs::read_to_string(entitlements).unwrap();
-    assert!(!entitlements.contains("allow-jit"));
-    assert!(!entitlements.contains("allow-unsigned-executable-memory"));
 }

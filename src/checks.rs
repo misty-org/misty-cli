@@ -16,9 +16,6 @@ pub fn release(workspace: &Workspace) -> Result<()> {
 
 pub fn all(workspace: &Workspace) -> Result<()> {
     app(workspace)?;
-    CommandSpec::new(npm())
-        .args(["run", "test:scripts"])
-        .run(&workspace.misty)?;
     server(workspace)?;
     website(workspace)?;
     features(workspace)?;
@@ -76,9 +73,6 @@ pub fn app(workspace: &Workspace) -> Result<()> {
             "src-tauri/features/kiri/Cargo.toml",
         ])
         .run(&workspace.misty)?;
-    CommandSpec::new(npm())
-        .args(["run", "test:scripts"])
-        .run(&workspace.misty)?;
     // The browser data crate and the workers the app embeds, each its own Cargo project.
     for manifest in [
         "src-tauri/features/file_access/Cargo.toml",
@@ -118,11 +112,6 @@ pub fn server(workspace: &Workspace) -> Result<()> {
     #[cfg(not(windows))]
     CommandSpec::new("./test.sh").run(&workspace.server)?;
 
-    let container_contract = workspace.server.join("scripts/check-container-contract.sh");
-    if container_contract.is_file() {
-        CommandSpec::new("./scripts/check-container-contract.sh").run(&workspace.server)?;
-    }
-
     let worker = workspace.server.join("services/journal-collab");
     CommandSpec::new(npm()).args(["ci"]).run(&worker)?;
     for script in ["typecheck", "test", "test:runtime", "audit:production"] {
@@ -147,6 +136,22 @@ pub fn features(workspace: &Workspace) -> Result<()> {
     }
     CommandSpec::new(npm())
         .args(["test", "--", "src/features"])
+        .run(&workspace.misty)
+}
+
+/// Live runs against real models, the local server stack and a headless browser.
+pub fn acceptance(workspace: &Workspace) -> Result<()> {
+    workspace.validate()?;
+    CommandSpec::new(npm())
+        .args([
+            "exec",
+            "--",
+            "vitest",
+            "run",
+            "--config",
+            ".config/vitest.acceptance.config.ts",
+        ])
+        .env("MISTY_ACCEPTANCE", "1")
         .run(&workspace.misty)
 }
 

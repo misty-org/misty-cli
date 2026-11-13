@@ -78,7 +78,6 @@ pub fn read(workspace: &Workspace) -> Result<BTreeMap<String, String>> {
         .iter()
         .map(|spec| base.join(spec.path))
         .chain(DEPLOYED_SERVER_FILES.iter().map(|file| base.join(file)))
-        .chain(RETIRED_FILES.iter().map(|file| base.join(file)))
         .collect::<BTreeSet<_>>();
     if base.exists() {
         for entry in WalkDir::new(&base).follow_links(false) {
@@ -90,7 +89,10 @@ pub fn read(workspace: &Workspace) -> Result<BTreeMap<String, String>> {
                     .is_some_and(|extension| extension == "env")
                 && !known_files.contains(entry.path())
             {
-                bail!("unknown environment file: {}", entry.path().display());
+                bail!(
+                    "unknown environment file: {}. Nothing reads it; delete it or move it out of this folder",
+                    entry.path().display()
+                );
             }
         }
     }
