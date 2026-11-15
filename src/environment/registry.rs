@@ -20,6 +20,10 @@ pub(super) const FILES: &[FileSpec] = &[
             "MISTY_OPERATOR_TOKEN",
             // Anyone may make an account.
             "MISTY_OPEN_SIGNUP",
+            // What an account made through open signup may use, such as Misty Cloud's Free plan.
+            "MISTY_SIGNUP_LIMITS",
+            // Space levels raised by Boosts, Misty Cloud's; unset, Spaces are unlimited.
+            "MISTY_SPACE_LEVELS",
             // Only these emails may make an account or sign in.
             "MISTY_ALLOWED_EMAILS",
             "MISTY_ALLOWED_ORIGINS",
