@@ -55,7 +55,8 @@ step at a time. `--workspace <folder>` or `MISTY_ROOT` points it at another fold
 
 Settings live outside every repository, in files only you can read:
 
-- `~/.misty/.env/server/` holds the server's settings and development keys (`misty setup server`).
+- `.env/server/` in the data folder `~/.misty/misty.conf` names (`misty.root`, `~/.misty/dev/default` when there is none) holds the server's settings and development keys (`misty setup server`). `MISTY_ENV_DIR` names another folder.
+- `~/.misty/misty.conf` can also give non-secret environment defaults in `[server]` and `[cli]`, used only where the shell and the `.env` files leave a name unset. Secrets never go there.
 - `misty-cli/.env/` holds `common.env`, `cloudflare.env` and `release.env` (git-ignored).
 
 `misty env describe` lists every server setting and the file it belongs in. Values are never printed.

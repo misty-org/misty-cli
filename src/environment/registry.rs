@@ -1,4 +1,5 @@
-//! The server settings files in ~/.misty/.env/server and the names each one owns. `misty.env` and
+//! The server settings files in the data folder's .env/server (`~/.misty/dev/default/.env/server`
+//! unless misty.conf names another folder) and the names each one owns. `misty.env` and
 //! `mailjet.env` are also there, for a deployed server. The CLI leaves those
 //! two alone, since the local server takes its address and origins from `runtime.env`.
 

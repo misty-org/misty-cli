@@ -27,9 +27,7 @@ pub fn goose(server: &Path, arguments: &[String]) -> Result<()> {
     // caller. Never mix an isolated CI/staging connection with migration credentials silently
     // loaded from a developer's normal database env file.
     if !SETTINGS.iter().any(|name| env::var_os(name).is_some()) {
-        let directory = env::var_os("MISTY_ENV_DIR")
-            .map(Into::into)
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".misty/.env/server"));
+        let directory = crate::misty_conf::server_env_dir();
         if let Ok(values) = dotenvy::from_path_iter(directory.join("database.env")) {
             for (name, value) in values.flatten() {
                 env::set_var(name, value);

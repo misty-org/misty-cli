@@ -10,6 +10,7 @@ mod diagnostics;
 mod environment;
 mod guide;
 mod hooks;
+mod misty_conf;
 mod process;
 mod release;
 mod server;
@@ -32,6 +33,10 @@ fn main() {
 }
 
 fn run() -> Result<()> {
+    // misty.conf: the CLI's own environment defaults, and the data folder whose .env/server the
+    // development server uses.
+    misty_conf::apply_defaults("cli");
+    misty_conf::point_server_env_dir();
     let arguments = cli::Cli::parse();
     let settings = config::Settings::load(arguments.workspace.as_deref())?;
     cli::dispatch(arguments, settings)

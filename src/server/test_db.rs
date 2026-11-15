@@ -165,9 +165,7 @@ pub(super) fn up_section(migration: &str) -> String {
 /// `docker compose` for compose.dev.yml, reading every env file in the server's environment
 /// folder and exporting database.env, as the stack itself sees them.
 fn development_compose() -> CommandSpec {
-    let directory = env::var_os("MISTY_ENV_DIR")
-        .map(Into::into)
-        .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".misty/.env/server"));
+    let directory = crate::misty_conf::server_env_dir();
     let mut compose = CommandSpec::new("docker").arg("compose");
     if directory.is_dir() {
         if let Ok(values) = dotenvy::from_path_iter(directory.join("database.env")) {

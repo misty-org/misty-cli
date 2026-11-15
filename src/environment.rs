@@ -19,17 +19,14 @@ pub use validate::*;
 #[cfg(test)]
 mod tests;
 
-/// Server settings live with the rest of Misty in ~/.misty, outside any checkout, with one folder for
-/// whichever server runs here. `MISTY_ENV_DIR` names another folder, as it does for Compose.
+/// Server settings live with the rest of Misty in ~/.misty, outside any checkout: in the `.env/server`
+/// of the data folder misty.conf names (`~/.misty/dev/default` when there is none). `MISTY_ENV_DIR`
+/// names another folder, as it does for Compose.
 pub fn root(workspace: &Workspace) -> PathBuf {
-    let in_workspace = || workspace.server.join(".env");
     if cfg!(test) {
-        return in_workspace();
+        return workspace.server.join(".env");
     }
-    env::var_os("MISTY_ENV_DIR")
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|home| home.join(".misty/.env/server")))
-        .unwrap_or_else(in_workspace)
+    crate::misty_conf::server_env_dir()
 }
 
 pub fn init(workspace: &Workspace) -> Result<()> {

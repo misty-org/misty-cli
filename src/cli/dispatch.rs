@@ -166,6 +166,8 @@ pub(super) fn load_command_environment(command: &Command, settings: &Settings) -
             ServerCommand::Test { .. } | ServerCommand::Goose { .. } | ServerCommand::StackTest
         ) {
             environment::apply(&settings.workspace)?;
+            // misty.conf's [server] defaults, for whatever the .env files and the shell left unset.
+            crate::misty_conf::apply_defaults("server");
         }
     }
     Ok(())
