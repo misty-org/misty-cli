@@ -1,6 +1,6 @@
-//! How suites run: a `──` header and a `✓` line with the time; steps side by side with their
-//! output prefixed; and suites one at a time, each in its own process group, under an optional
-//! time limit.
+//! How suites run: a `──` header and a `✓` line with the time; steps one after another with their
+//! output prefixed, each held to a few cores (`jobs`); and suites one at a time, each in its own
+//! process group, under an optional time limit.
 
 use std::{
     io::{BufRead, BufReader, Read},
@@ -27,7 +27,7 @@ impl std::fmt::Display for Failed {
 
 impl std::error::Error for Failed {}
 
-/// One step of a parallel suite: its commands run in order.
+/// One step of a suite: its commands run in order.
 pub struct Step {
     pub name: &'static str,
     pub commands: Vec<CommandSpec>,
@@ -62,68 +62,43 @@ pub fn commands(directory: &Path, commands: impl IntoIterator<Item = CommandSpec
     Ok(())
 }
 
-/// Runs the steps at the same time, streaming each line prefixed with its step's name, and
-/// reports each as it finishes. Periodic updates keep long-running steps visible even when their
-/// tools buffer output. Fails with the exit code of the first step (in launch order) that failed.
-pub fn parallel(directory: &Path, steps: Vec<Step>) -> Result<()> {
+/// How many CPU cores a check may keep busy: `MISTY_HOOK_JOBS` (also from misty.conf's `[cli]`),
+/// else 4, so a commit or push never takes the whole computer.
+pub fn jobs() -> String {
+    std::env::var("MISTY_HOOK_JOBS")
+        .ok()
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .filter(|jobs| *jobs > 0)
+        .unwrap_or(4)
+        .to_string()
+}
+
+/// A command held to `jobs()` cores: Cargo's build jobs, Rust's test threads and Go's threads.
+pub fn light(command: CommandSpec) -> CommandSpec {
+    let jobs = jobs();
+    command
+        .env("CARGO_BUILD_JOBS", &jobs)
+        .env("RUST_TEST_THREADS", &jobs)
+        .env("GOMAXPROCS", &jobs)
+}
+
+/// Runs the steps one after another, each held to `jobs()` cores, streaming each line prefixed
+/// with its step's name. Stops at the first step that fails, with its exit code.
+pub fn in_turn(directory: &Path, steps: Vec<Step>) -> Result<()> {
     let output = Arc::new(Mutex::new(()));
-    let mut running = Vec::new();
     for step in steps {
-        println!("▶ {} started", step.name);
-        let directory = directory.to_path_buf();
-        let output = output.clone();
-        let name = step.name;
-        let handle = thread::spawn(move || {
-            let started = Instant::now();
-            for command in &step.commands {
-                let code = stream(&directory, command, name, &output);
-                if code != 0 {
-                    return (code, started.elapsed().as_secs());
-                }
-            }
-            (0, started.elapsed().as_secs())
-        });
-        running.push((name, Some(handle)));
-    }
-    let started = Instant::now();
-    let mut last_report = Instant::now();
-    let mut codes = vec![0; running.len()];
-    loop {
-        for (index, (name, slot)) in running.iter_mut().enumerate() {
-            if slot.as_ref().is_some_and(|handle| handle.is_finished()) {
-                let (code, seconds) = slot.take().unwrap().join().unwrap_or((1, 0));
-                let _guard = output.lock();
-                if code == 0 {
-                    println!("✓ {name} ({seconds}s)");
-                } else {
-                    println!("✗ {name}");
-                }
-                codes[index] = code;
+        println!("▶ {}", step.name);
+        let started = Instant::now();
+        for command in step.commands {
+            let code = stream(directory, &light(command), step.name, &output);
+            if code != 0 {
+                println!("✗ {}", step.name);
+                return Err(Failed(code).into());
             }
         }
-        let still: Vec<&str> = running
-            .iter()
-            .filter(|(_, slot)| slot.is_some())
-            .map(|(name, _)| *name)
-            .collect();
-        if still.is_empty() {
-            break;
-        }
-        if last_report.elapsed() >= Duration::from_secs(15) {
-            let _guard = output.lock();
-            println!(
-                "… still running after {}s: {}",
-                started.elapsed().as_secs(),
-                still.join(", ")
-            );
-            last_report = Instant::now();
-        }
-        thread::sleep(Duration::from_millis(200));
+        println!("✓ {} ({}s)", step.name, started.elapsed().as_secs());
     }
-    match codes.into_iter().find(|code| *code != 0) {
-        Some(code) => Err(Failed(code).into()),
-        None => Ok(()),
-    }
+    Ok(())
 }
 
 /// Runs one command with its stdout and stderr streamed line by line under `[name]`.

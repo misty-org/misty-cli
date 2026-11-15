@@ -23,7 +23,7 @@ const SCAN: Scan = Scan {
 
 pub fn suite(root: &Path, name: &str) -> Result<()> {
     match name {
-        "frontend" => runner::parallel(
+        "frontend" => runner::in_turn(
             root,
             vec![
                 Step::new("frontend-typecheck", [npm_run("typecheck")]),
@@ -37,7 +37,7 @@ pub fn suite(root: &Path, name: &str) -> Result<()> {
         // Injected page scripts and the dev runner (tasks/).
         "scripts" => runner::commands(root, [npm_run("test:scripts")]),
         // Tests only: compiling for other platforms and building examples wait for a release.
-        "rust-desktop" => runner::parallel(root, rust_desktop()),
+        "rust-desktop" => runner::in_turn(root, rust_desktop()),
         "desktop-windows" => desktop_windows(root),
         "secrets" => secrets::commits(root, &SCAN),
         "staged-secrets" => secrets::staged(root, &SCAN),

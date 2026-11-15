@@ -3,13 +3,12 @@
 //!
 //! Arguments replace the default `./...` package list, e.g.
 //! `misty server test --isolated ./test/contract/postgres -run NativeNote`. With none the suite
-//! runs in parallel: every job gets its own copy of the migrated database, and the slowest
-//! package's tests are split across jobs.
+//! runs as jobs one after another, each held to a few cores and with its own copy of the migrated
+//! database; MISTY_GO_HEAVY_SHARDS splits the slowest package's tests across more jobs.
 
 use std::{
     path::Path,
     process::{Output, Stdio},
-    thread,
 };
 
 use anyhow::{Context, Result};
@@ -65,8 +64,10 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<()> {
         return finish(output.status.code());
     }
 
-    let heavy_shards = count("MISTY_GO_HEAVY_SHARDS", 4);
-    let other_jobs = count("MISTY_GO_OTHER_JOBS", 2);
+    // One shard of each by default, run one after another, so a commit or push stays light;
+    // MISTY_GO_HEAVY_SHARDS and MISTY_GO_OTHER_JOBS split them further.
+    let heavy_shards = count("MISTY_GO_HEAVY_SHARDS", 1);
+    let other_jobs = count("MISTY_GO_OTHER_JOBS", 1);
     let go = |arguments: &[&str]| CommandSpec::new("go").args(arguments).capture(root);
     let heavy_tests: Vec<String> = go(&["test", "-list", "^Test", HEAVY])?
         .lines()
@@ -109,25 +110,17 @@ pub fn run(root: &Path, arguments: &[String]) -> Result<()> {
             &format!("CREATE DATABASE {name} TEMPLATE misty_test"),
         ])?;
     }
-    let handles: Vec<_> = jobs
-        .into_iter()
-        .map(|(name, arguments)| {
-            let root = root.to_path_buf();
-            thread::spawn(move || go_test(&root, &name, &arguments))
-        })
-        .collect();
     let mut failed = false;
-    for handle in handles {
-        match handle.join() {
-            Ok(Ok(output)) => {
+    for (name, arguments) in jobs {
+        match go_test(root, &name, &arguments) {
+            Ok(output) => {
                 failed |= !output.status.success();
                 print_quietly(&output);
             }
-            Ok(Err(error)) => {
+            Err(error) => {
                 failed = true;
                 eprintln!("{error:#}");
             }
-            Err(_) => failed = true,
         }
     }
     drop(database);
@@ -169,7 +162,7 @@ fn migrate(root: &Path, port: &str) -> Result<()> {
 }
 
 fn go_test(root: &Path, database: &str, arguments: &[String]) -> Result<Output> {
-    CommandSpec::new("go")
+    super::runner::light(CommandSpec::new("go"))
         .args(["test", "-p", "1", "-timeout", "30m", "-count=1"])
         .args(arguments)
         .env("DB_NAME", database)
