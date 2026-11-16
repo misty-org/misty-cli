@@ -149,7 +149,7 @@ services:
         println!("healthy; {first_state}");
 
         step("the console answers on its loopback port");
-        let console = format!("http://127.0.0.1:{}/healthz", self.console_port);
+        let console = format!("http://127.0.0.1:{}/health", self.console_port);
         retry(30, || curl(&["-fsS", &console]).is_ok(), "the console never answered")?;
         let logs = self
             .compose(&["logs", "--no-color", "console"])

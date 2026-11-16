@@ -46,7 +46,7 @@ fn running(path: &Path) -> Option<Handoff> {
     let handoff: Handoff = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
     let url = Url::parse(&handoff.url).ok()?;
     let addr = url.socket_addrs(|| None).ok()?.into_iter().next()?;
-    if healthz(addr) {
+    if healthy(addr) {
         Some(handoff)
     } else {
         let _ = fs::remove_file(path);
@@ -153,12 +153,12 @@ fn published(workspace: &Workspace, service: &str, port: u16) -> Option<SocketAd
 }
 
 /// Minimal HTTP probe; the CLI has no HTTP client dependency.
-fn healthz(addr: SocketAddr) -> bool {
+fn healthy(addr: SocketAddr) -> bool {
     let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(500)) else {
         return false;
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(1)));
-    let request = format!("GET /healthz HTTP/1.0\r\nHost: {addr}\r\n\r\n");
+    let request = format!("GET /health HTTP/1.0\r\nHost: {addr}\r\n\r\n");
     if stream.write_all(request.as_bytes()).is_err() {
         return false;
     }
