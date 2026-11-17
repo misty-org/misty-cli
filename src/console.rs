@@ -152,8 +152,8 @@ fn published(workspace: &Workspace, service: &str, port: u16) -> Option<SocketAd
         .ok()
 }
 
-/// Minimal HTTP probe; the CLI has no HTTP client dependency.
-fn healthy(addr: SocketAddr) -> bool {
+/// Minimal HTTP probe of GET /health; the CLI has no HTTP client dependency.
+pub(crate) fn healthy(addr: SocketAddr) -> bool {
     let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_millis(500)) else {
         return false;
     };

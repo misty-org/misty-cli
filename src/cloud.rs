@@ -7,8 +7,11 @@
 
 use std::{
     fs,
+    net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
+    thread,
+    time::{Duration, Instant},
 };
 
 use anyhow::{bail, Context, Result};
@@ -75,7 +78,7 @@ pub enum CloudCommand {
 pub enum ProdCommand {
     /// Validate the pins, the settings files, the volumes and the Compose file.
     Check,
-    /// Check, pull and start the server and billing.
+    /// Check, pull and start the server and billing, then wait for billing's health check.
     Up,
     /// Stop the stack (its data stays).
     Down,
@@ -103,7 +106,12 @@ pub fn dispatch(workspace: &Workspace, command: CloudCommand) -> Result<()> {
                 ProdCommand::Check => check(&root),
                 ProdCommand::Up => up(&root),
                 ProdCommand::Down => compose(&root, &["down", "--remove-orphans"]),
-                ProdCommand::Logs { service } => compose(&root, &["logs", "--follow", &service]),
+                ProdCommand::Logs { service } => {
+                    if service.starts_with('-') {
+                        bail!("Name a service, such as billing or setup.");
+                    }
+                    compose(&root, &["logs", "--follow", &service])
+                }
                 ProdCommand::EnableWriter { yes } => {
                     if !yes {
                         bail!("This makes this database the charging authority; rerun with --yes.");
@@ -218,7 +226,33 @@ fn up(root: &Path) -> Result<()> {
     compose(root, &["pull"])?;
     // The server's compose.yml keeps its build: sections; the VPS never builds.
     compose(root, &["up", "--detach", "--no-build", "--remove-orphans"])?;
-    println!("Started. Billing answers at http://127.0.0.1:8091/health once it is up.");
+    wait_for_billing()
+}
+
+/// How long `up` waits for billing to answer once Compose has started it.
+const BILLING_WAIT: Duration = Duration::from_secs(180);
+
+/// Waits for billing's health check on the port Compose publishes it on (BILLING_HOST_PORT,
+/// 8091 unless the shell sets it).
+fn wait_for_billing() -> Result<()> {
+    let port = std::env::var("BILLING_HOST_PORT")
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok())
+        .unwrap_or(8091);
+    let address = SocketAddr::from(([127, 0, 0, 1], port));
+    println!("Started. Waiting for billing at http://{address}/health…");
+    let started = Instant::now();
+    while !crate::console::healthy(address) {
+        if started.elapsed() > BILLING_WAIT {
+            bail!(
+                "Billing didn't answer http://{address}/health within {} seconds. See \
+                 misty cloud prod logs billing (and billing-setup, setup).",
+                BILLING_WAIT.as_secs()
+            );
+        }
+        thread::sleep(Duration::from_secs(2));
+    }
+    println!("Billing is healthy.");
     Ok(())
 }
 
@@ -304,6 +338,7 @@ fn check(root: &Path) -> Result<()> {
             .context("no home folder")?
             .join(".misty/.env/server"),
     };
+    private_folder(&server_env, true)?;
     for name in ["misty.env", "cloudflare.env", "google.env"] {
         private(&server_env.join(name), true)?;
     }
@@ -314,6 +349,9 @@ fn check(root: &Path) -> Result<()> {
         );
     }
 
+    for folder in [".env", ".env/prod"] {
+        private_folder(&root.join(folder), false)?;
+    }
     if private(&root.join(STRIPE_ENV), false)? {
         let stripe = read_env(&root.join(STRIPE_ENV))?;
         if env_value(&stripe, "STRIPE_SECRET_KEY").is_empty() {
@@ -376,6 +414,28 @@ fn private(path: &Path, required: bool) -> Result<bool> {
         }
     }
     let _ = metadata;
+    Ok(true)
+}
+
+/// Whether a settings folder exists; it must be mode 0700 when it does, and exist when
+/// required.
+fn private_folder(path: &Path, required: bool) -> Result<bool> {
+    let Ok(metadata) = fs::metadata(path) else {
+        if required {
+            bail!("Missing {}.", path.display());
+        }
+        return Ok(false);
+    };
+    if !metadata.is_dir() {
+        bail!("{} must be a folder.", path.display());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o777 != 0o700 {
+            bail!("{0} must be mode 0700 (chmod 700 {0}).", path.display());
+        }
+    }
     Ok(true)
 }
 
