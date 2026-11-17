@@ -326,3 +326,80 @@ fn compose_settings_have_their_own_file() {
     }
     assert_eq!(owners["MISTY_OWNER_EMAIL"], "runtime.env");
 }
+
+#[test]
+fn byte_limits_are_whole_numbers_within_the_ceiling() {
+    let ceiling = Some(10 << 20);
+    for value in ["", " ", "1", "+42", " 10485760 "] {
+        assert!(
+            validate::validate_bytes("LIMIT", value, ceiling).is_ok(),
+            "{value:?}"
+        );
+    }
+    for value in ["0", "-1", "10485761", "1.5", "10MB", "lots"] {
+        assert!(
+            validate::validate_bytes("LIMIT", value, ceiling).is_err(),
+            "{value:?}"
+        );
+    }
+    assert!(validate::validate_bytes("EGRESS", "999999999999999", None).is_ok());
+    assert!(validate::validate_bytes("EGRESS", "0", None).is_err());
+}
+
+#[test]
+fn link_lifetimes_are_go_durations_between_30s_and_60m() {
+    assert_eq!(validate::go_duration_seconds("1h30m"), Some(5400.0));
+    assert_eq!(validate::go_duration_seconds("2.5s"), Some(2.5));
+    let millis = validate::go_duration_seconds("300ms").unwrap();
+    assert!((millis - 0.3).abs() < 1e-9, "{millis}");
+    assert_eq!(validate::go_duration_seconds("0"), Some(0.0));
+    for value in ["", "15", "m", "1.2.3s", "5d", "s5"] {
+        assert_eq!(validate::go_duration_seconds(value), None, "{value:?}");
+    }
+    for value in ["", "30s", "15m", "1h", "0.5m"] {
+        assert!(
+            validate::validate_transfer_ttl("TTL", value).is_ok(),
+            "{value:?}"
+        );
+    }
+    for value in ["29s", "61m", "2h", "-15m", "0", "15"] {
+        assert!(
+            validate::validate_transfer_ttl("TTL", value).is_err(),
+            "{value:?}"
+        );
+    }
+}
+
+#[test]
+fn a_previous_ticket_key_is_an_ed25519_public_key() {
+    use base64::Engine;
+    let key = base64::engine::general_purpose::STANDARD.encode([7_u8; 32]);
+    assert!(validate::validate_public_key("KEY", &key).is_ok());
+    assert!(validate::validate_public_key("KEY", "").is_ok());
+    let short = base64::engine::general_purpose::STANDARD.encode([7_u8; 31]);
+    assert!(validate::validate_public_key("KEY", &short).is_err());
+    assert!(validate::validate_public_key("KEY", "not base64!").is_err());
+}
+
+#[test]
+fn model_settings_are_refused_with_the_reason() {
+    let tmp = tempfile::tempdir().unwrap();
+    let workspace = fixture_workspace(tmp.path());
+    let error = set(&workspace, "MISTY_AGENT_MODEL", "fixture")
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("no model keys"), "{error}");
+    write_private(
+        &root(&workspace).join("runtime.env"),
+        b"OPENAI_API_KEY=private-fixture-key\n",
+    )
+    .unwrap();
+    let error = read(&workspace).unwrap_err().to_string();
+    assert!(error.contains("no model keys"), "{error}");
+    assert!(!error.contains("private-fixture-key"));
+    set(&workspace, "MISTY_R2_UPLOAD_URL_TTL", "10m").unwrap();
+    assert_eq!(
+        ownership().unwrap()["MISTY_R2_UPLOAD_URL_TTL"],
+        "storage.env"
+    );
+}

@@ -39,6 +39,7 @@ pub fn set(workspace: &Workspace, name: &str, value: &str) -> Result<()> {
     if value.contains(['\n', '\r', '\0']) {
         bail!("environment values must be single-line");
     }
+    refuse_retired(name)?;
     let owners = ownership()?;
     let relative = owners.get(name).context("unknown environment setting")?;
     let path = root(workspace).join(relative);

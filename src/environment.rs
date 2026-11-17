@@ -108,6 +108,7 @@ pub fn read(workspace: &Workspace) -> Result<BTreeMap<String, String>> {
             let (name, value) = item.map_err(|_| {
                 anyhow::anyhow!("could not parse {} (values omitted)", path.display())
             })?;
+            refuse_retired(&name)?;
             let expected = ownership
                 .get(name.as_str())
                 .with_context(|| format!("unknown environment variable {name}"))?;
@@ -173,6 +174,17 @@ fn cli_owner(name: &str) -> Result<&'static str> {
         return Ok("common.env");
     }
     bail!("unknown CLI environment variable {name}")
+}
+
+/// A setting a production server refuses to start with is refused here too, saying why.
+fn refuse_retired(name: &str) -> Result<()> {
+    if RETIRED.contains(&name) {
+        bail!(
+            "{name} isn't a server setting: a Misty server holds no model keys or models, and \
+             one in production refuses to start (models run on each person's computer); remove it"
+        );
+    }
+    Ok(())
 }
 
 fn ownership() -> Result<BTreeMap<&'static str, &'static str>> {

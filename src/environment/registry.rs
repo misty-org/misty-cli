@@ -30,6 +30,16 @@ pub(super) const FILES: &[FileSpec] = &[
             // Only these emails may make an account or sign in.
             "MISTY_ALLOWED_EMAILS",
             "MISTY_ALLOWED_ORIGINS",
+            // Bytes the API serves a day, to one person and to everyone; unset, 25 GiB and
+            // 200 GiB.
+            "MISTY_EGRESS_MAX_BYTES_PER_IDENTITY_DAY",
+            "MISTY_EGRESS_MAX_BYTES_PER_DAY",
+            // The largest file each kind of upload takes, in bytes. Only lower than the
+            // defaults: 100 MiB, 10 MiB, 15 MiB and 15 MiB.
+            "MISTY_LIBRARY_MAX_FILE_BYTES",
+            "MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES",
+            "MISTY_NOTE_ATTACHMENT_MAX_FILE_BYTES",
+            "MISTY_DRAWING_ASSET_MAX_FILE_BYTES",
             "MISTY_ENVIRONMENT",
             "MISTY_HOST_PORT",
             "MISTY_INSTANCE_NAME",
@@ -82,6 +92,10 @@ pub(super) const FILES: &[FileSpec] = &[
             "R2_ENDPOINT",
             "R2_SECRET_KEY",
             "MISTY_R2_ALLOWED_ORIGINS",
+            // How long a signed upload and download link stays valid, as a Go duration
+            // between 30s and 60m; unset, 15m and 2m.
+            "MISTY_R2_UPLOAD_URL_TTL",
+            "MISTY_R2_DOWNLOAD_URL_TTL",
         ],
     },
     FileSpec {
@@ -130,6 +144,9 @@ pub(super) const FILES: &[FileSpec] = &[
             "JOURNAL_COLLAB_ROOM_SALT",
             "JOURNAL_COLLAB_TICKET_PRIVATE_KEY",
             "JOURNAL_COLLAB_TICKET_PUBLIC_KEY",
+            // The public key of the ticket key before a rotation, which the Worker still
+            // accepts until it is retired.
+            "JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS",
         ],
     },
     FileSpec {
@@ -140,6 +157,26 @@ pub(super) const FILES: &[FileSpec] = &[
         path: "crypto/services.env",
         names: &["MISTY_AUTH_SIGNING_KEY", "MISTY_AUTH_SIGNING_KEY_PREVIOUS"],
     },
+];
+
+/// Names a production server refuses to start with (misty-server's
+/// internal/app/production_environment.go): a Misty server holds no model keys or models.
+pub(super) const RETIRED: &[&str] = &[
+    "AI_GATEWAY_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GEMINI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "NVIDIA_API_KEY",
+    "ELEVENLABS_API_KEY",
+    "SONIOX_API_KEY",
+    "OLLAMA_API_KEY",
+    "OPENAI_COMPATIBLE_API_KEY",
+    "VERCEL_OIDC_TOKEN",
+    "MISTY_AGENT_MODEL",
+    "MISTY_AGENT_RUNTIME_URL",
+    "MISTY_AGENT_RUNTIME_CONTROL_SECRET",
+    "MISTY_COMPOSIO_API_KEY",
 ];
 
 pub(super) const DEV_REQUIRED: &[&str] = &[

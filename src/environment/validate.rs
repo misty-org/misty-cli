@@ -64,6 +64,121 @@ pub fn validate(workspace: &Workspace) -> Result<()> {
             .unwrap_or_default();
         parse_extra_ingress(value, hostname)?;
     }
+    for (name, ceiling) in BYTE_LIMITS {
+        if let Some(value) = values.get(*name) {
+            validate_bytes(name, value, *ceiling)?;
+        }
+    }
+    for name in TRANSFER_TTLS {
+        if let Some(value) = values.get(name) {
+            validate_transfer_ttl(name, value)?;
+        }
+    }
+    if let Some(value) = values.get("JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS") {
+        validate_public_key("JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS", value)?;
+    }
+    Ok(())
+}
+
+const MIB: i64 = 1 << 20;
+
+/// Byte settings and the most each may be (misty-server's internal/spaces/permissions.go: an
+/// upload limit can only lower its default). The egress budgets have no ceiling.
+const BYTE_LIMITS: &[(&str, Option<i64>)] = &[
+    ("MISTY_EGRESS_MAX_BYTES_PER_IDENTITY_DAY", None),
+    ("MISTY_EGRESS_MAX_BYTES_PER_DAY", None),
+    ("MISTY_LIBRARY_MAX_FILE_BYTES", Some(100 * MIB)),
+    ("MISTY_CHAT_ATTACHMENT_MAX_FILE_BYTES", Some(10 * MIB)),
+    ("MISTY_NOTE_ATTACHMENT_MAX_FILE_BYTES", Some(15 * MIB)),
+    ("MISTY_DRAWING_ASSET_MAX_FILE_BYTES", Some(15 * MIB)),
+];
+
+const TRANSFER_TTLS: [&str; 2] = ["MISTY_R2_UPLOAD_URL_TTL", "MISTY_R2_DOWNLOAD_URL_TTL"];
+
+/// The server reads a byte setting as a whole number and quietly keeps its default when that
+/// fails or isn't positive, then refuses to start when an upload limit is above its ceiling.
+/// Here both are refused. Empty means the default.
+pub(super) fn validate_bytes(name: &str, value: &str, ceiling: Option<i64>) -> Result<()> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(());
+    }
+    let bytes = value.parse::<i64>().ok().filter(|bytes| *bytes > 0);
+    match (bytes, ceiling) {
+        (Some(bytes), Some(ceiling)) if bytes > ceiling => {
+            bail!("{name} must be between 1 and {ceiling} bytes")
+        }
+        (Some(_), _) => Ok(()),
+        (None, Some(ceiling)) => bail!("{name} must be between 1 and {ceiling} bytes"),
+        (None, None) => bail!("{name} must be a whole number of bytes above 0"),
+    }
+}
+
+/// The server reads a link lifetime as a Go duration, quietly keeps its default when that fails
+/// or isn't positive, and refuses to start outside 30s to 60m. Empty means the default.
+pub(super) fn validate_transfer_ttl(name: &str, value: &str) -> Result<()> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(());
+    }
+    if !go_duration_seconds(value).is_some_and(|seconds| (30.0..=3600.0).contains(&seconds)) {
+        bail!("{name} must be a duration between 30s and 60m, such as 15m or 90s");
+    }
+    Ok(())
+}
+
+/// Seconds in a Go duration such as 1h30m, 2.5s or 300ms (time.ParseDuration), or None.
+pub(super) fn go_duration_seconds(value: &str) -> Option<f64> {
+    let (sign, mut rest) = match value.as_bytes().first() {
+        Some(b'-') => (-1.0, &value[1..]),
+        Some(b'+') => (1.0, &value[1..]),
+        _ => (1.0, value),
+    };
+    if rest == "0" {
+        return Some(0.0);
+    }
+    if rest.is_empty() {
+        return None;
+    }
+    let mut total = 0.0;
+    while !rest.is_empty() {
+        let number = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
+        let (digits, after) = rest.split_at(number);
+        if digits.is_empty() || digits == "." || digits.matches('.').count() > 1 {
+            return None;
+        }
+        let unit = after
+            .find(|c: char| c.is_ascii_digit() || c == '.')
+            .unwrap_or(after.len());
+        let (unit, after) = after.split_at(unit);
+        let scale = match unit {
+            "ns" => 1e-9,
+            "us" | "µs" | "μs" => 1e-6,
+            "ms" => 1e-3,
+            "s" => 1.0,
+            "m" => 60.0,
+            "h" => 3600.0,
+            _ => return None,
+        };
+        total += digits.parse::<f64>().ok()? * scale;
+        rest = after;
+    }
+    Some(sign * total)
+}
+
+/// An Ed25519 public key as setup and the CLI write one: 32 bytes, standard base64.
+pub(super) fn validate_public_key(name: &str, value: &str) -> Result<()> {
+    use base64::Engine;
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(());
+    }
+    let decoded = base64::engine::general_purpose::STANDARD.decode(value);
+    if !decoded.is_ok_and(|key| key.len() == 32) {
+        bail!("{name} must be an Ed25519 public key: 32 bytes in base64");
+    }
     Ok(())
 }
 
