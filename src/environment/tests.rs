@@ -8,6 +8,7 @@ fn fixture_workspace(path: &Path) -> Workspace {
         cli: path.join("cli"),
         website: path.join("website"),
         features: path.join("src/features"),
+        cloud: path.join("cloud"),
     }
 }
 
@@ -169,6 +170,7 @@ fn optional_files_are_created_only_when_configured() {
         cli: tmp.path().join("cli"),
         website: tmp.path().join("website"),
         features: tmp.path().join("src/features"),
+        cloud: tmp.path().join("cloud"),
     };
     init(&workspace).unwrap();
     assert!(!workspace.cli.join(".env").exists());
@@ -200,6 +202,7 @@ fn setup_is_idempotent_and_setting_values_stay_private() {
         cli: tmp.path().join("cli"),
         website: tmp.path().join("website"),
         features: tmp.path().join("src/features"),
+        cloud: tmp.path().join("cloud"),
     };
     init(&workspace).unwrap();
     crate::server::initialize_development_secrets(&workspace).unwrap();
