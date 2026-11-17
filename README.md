@@ -46,8 +46,10 @@ step at a time. `--workspace <folder>` or `MISTY_ROOT` points it at another fold
 | `misty check app\|scripts\|features\|server\|go-sizes\|website\|acceptance\|cli\|all` | Runs a repository's checks. `acceptance` runs misty's live tests against real models and the local stack. |
 | `misty hook install` | Installs `pre-commit` and `pre-push` in misty, misty-server, misty-cloud and misty-website. There is no hosted CI. |
 | `misty hook run <suite>…` | Runs the current repository's hook suites by hand, e.g. `frontend`, `go`, `web`, `secrets` or `all`. `MISTY_COMMIT_SECONDS=<n>` caps misty's commit checks for once. |
-| `misty cloud release <version>` | Builds misty-cloud's image here, pushes it to GHCR, tags the commit and saves the digest in `.env/prod/billing.env`. |
-| `misty cloud prod check\|up\|down\|logs\|enable-writer --yes` | Operates misty-cloud's production billing stack; run it on the VPS, from the misty-cloud checkout. |
+| `misty cloud release <version>` | Builds misty-cloud's billing image here, pushes it to GHCR, tags the commit and pins the digest in `deploy/billing/version.env` (commit it). |
+| `misty cloud pin-server <commit>` | Pins the misty-server release production runs: its `compose.yml` and published images, in misty-cloud's `deploy/misty-server/` (commit both). |
+| `misty cloud ship [--host misty-vps] [--path misty-cloud] [--up]` | Copies the committed deploy files (`deploy/prod-files.txt`) to the VPS, never `.env/`; `--up` then starts the stack there. |
+| `misty cloud prod check\|up\|down\|logs [service]\|enable-writer --yes` | Operates Misty Cloud's production stack (the server and billing); run it on the VPS, in the deploy folder (`~/misty-cloud`). |
 | `misty build` | Builds the app, step by step. |
 | `misty release [--dry-run]` | Publishes a release, step by step: start it, build it on each system, make it public. |
 

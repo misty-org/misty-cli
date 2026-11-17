@@ -36,6 +36,11 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "hook", "run", "frontend", "scripts"],
         vec!["misty", "cloud", "release", "0.1.0"],
         vec!["misty", "cloud", "prod", "enable-writer", "--yes"],
+        vec!["misty", "cloud", "prod", "logs"],
+        vec!["misty", "cloud", "prod", "logs", "billing-setup"],
+        vec!["misty", "cloud", "pin-server", "0a9c93180a9c93180a9c93180a9c93180a9c9318"],
+        vec!["misty", "cloud", "ship"],
+        vec!["misty", "cloud", "ship", "--host", "misty-vps", "--path", "misty-cloud", "--up"],
     ] {
         Cli::try_parse_from(arguments).unwrap();
     }
