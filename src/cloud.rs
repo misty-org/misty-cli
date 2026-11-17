@@ -1,9 +1,12 @@
-//! `misty cloud`: misty-cloud's releases, its server pin, and its production stack.
+//! `misty cloud`: misty-cloud's releases, its server pin, and its billing stack.
 //!
-//! Misty Cloud's production stack (misty-cloud's compose.prod.yml) runs the open Misty server and
-//! billing together on the VPS. `release`, `pin-server` and `ship` run on this computer, in the
-//! misty-cloud git checkout; `prod` runs on the VPS, in the deploy folder `ship` fills (by
-//! default ~/misty-cloud), which has no git.
+//! Billing runs from one Compose file, misty-cloud's compose.yml, in development and in
+//! production alike; only the values in `.env/dev/` and `.env/prod/` differ, and those folders
+//! hold the same files with the same names (SETTINGS). Beside billing runs the Misty server,
+//! as its own stack: `misty server up` in development, deploy/misty-server/ in production.
+//! `release`, `pin-server`, `ship` and `dev` run on this computer, in the misty-cloud git
+//! checkout; `prod` runs on the VPS, in the deploy folder `ship` fills (by default
+//! ~/misty-cloud), which has no git.
 
 use std::{
     fs,
@@ -26,22 +29,53 @@ const SERVER_IMAGE: &str = "ghcr.io/misty-org/misty-server";
 const BILLING_VERSION: &str = "deploy/billing/version.env";
 const SERVER_VERSION: &str = "deploy/misty-server/version.env";
 const SERVER_COMPOSE: &str = "deploy/misty-server/compose.yml";
+const SERVER_OVERRIDE: &str = "deploy/misty-server/compose.override.yml";
 const PROD_FILES: &str = "deploy/prod-files.txt";
-/// The development stack's Compose file and the private values it interpolates; billing reads
-/// the sandbox Stripe key from .env/dev/integrations/stripe.env.
-const DEV_COMPOSE: &str = "compose.dev.yml";
-const DEV_DATABASE_ENV: &str = ".env/dev/database.env";
-/// Billing's one setting, made on the VPS and never copied.
-const STRIPE_ENV: &str = ".env/prod/stripe.env";
-/// Files billing used to need; billing-setup makes what they held now.
-const RETIRED_FILES: [&str; 2] = [".env/prod/billing.env", ".env/prod/misty-server.env"];
+/// Billing's Compose file, for both environments.
+const BILLING_COMPOSE: &str = "compose.yml";
+/// The files each environment's settings folder holds, the same in both: what Compose itself
+/// reads (passed with --env-file), then billing's Stripe and server settings.
+const COMPOSE_ENV: &str = "compose.env";
+const SETTINGS: [&str; 3] = [COMPOSE_ENV, "stripe.env", "misty-server.env"];
+/// Files billing used to need; billing-setup and the settings folder hold what they held now.
+const RETIRED_FILES: [&str; 4] = [
+    ".env/prod/billing.env",
+    ".env/dev/database.env",
+    ".env/dev/integrations",
+    "compose.prod.yml",
+];
 /// Settings stripe.env used to hold that nothing reads now.
-const RETIRED_STRIPE: [&str; 4] = [
+const RETIRED_STRIPE: [&str; 5] = [
     "STRIPE_PRICE_PLUS_MONTHLY",
     "STRIPE_PRICE_PLUS_YEARLY",
     "STRIPE_PRICE_BOOST_MONTHLY",
     "STRIPE_PORTAL_LOGIN_URL",
+    "STRIPE_PORTAL_RETURN_URL",
 ];
+
+/// Which settings folder billing runs with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Environment {
+    Dev,
+    Prod,
+}
+
+impl Environment {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Dev => "dev",
+            Self::Prod => "prod",
+        }
+    }
+
+    fn folder(self) -> String {
+        format!(".env/{}", self.name())
+    }
+
+    fn file(self, name: &str) -> String {
+        format!(".env/{}/{name}", self.name())
+    }
+}
 
 #[derive(Debug, Args)]
 pub struct Cloud {
@@ -72,22 +106,44 @@ pub enum CloudCommand {
         #[arg(long)]
         up: bool,
     },
-    /// Operate the production stack, on the VPS.
+    /// Operate production's billing and server, on the VPS, with .env/prod/.
     Prod {
         #[command(subcommand)]
-        command: ProdCommand,
+        command: StackCommand,
     },
-    /// Operate the development stack (compose.dev.yml), in the misty-cloud checkout.
+    /// Operate development's billing, in the misty-cloud checkout, with .env/dev/ (the server
+    /// is `misty server up`'s).
     Dev {
         #[command(subcommand)]
-        command: DevCommand,
+        command: StackCommand,
     },
 }
 
+/// The same commands for both environments.
 #[derive(Debug, Subcommand)]
-pub enum DevCommand {
-    /// Check the sandbox Stripe account's products, prices and Customer Portal; --apply makes
-    /// what's missing.
+pub enum StackCommand {
+    /// Validate the settings folder and the Compose files (in production also the pins and the
+    /// server's settings and volumes).
+    Check,
+    /// Check, then start billing (in production, pull and start the server first) and wait for
+    /// billing's health check. Development builds this checkout's billing.
+    Up,
+    /// Stop billing (in production also the server); the data stays.
+    Down,
+    /// Follow one service's logs.
+    Logs {
+        /// Such as billing, billing-setup or stripe-listen; in production also api or setup.
+        #[arg(default_value = "billing")]
+        service: String,
+    },
+    /// Make this database the charging authority (once, on a fresh database).
+    EnableWriter {
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Check the Stripe account behind stripe.env's key: products, prices and Customer Portal;
+    /// --apply makes what's missing. Runs a one-off billing container; the running billing is
+    /// left alone.
     StripeSetup(StripeSetup),
 }
 
@@ -101,88 +157,81 @@ pub struct StripeSetup {
     yes: bool,
 }
 
-#[derive(Debug, Subcommand)]
-pub enum ProdCommand {
-    /// Validate the pins, the settings files, the volumes and the Compose file.
-    Check,
-    /// Check, pull and start the server and billing, then wait for billing's health check.
-    Up,
-    /// Stop the stack (its data stays).
-    Down,
-    /// Follow one service's logs.
-    Logs {
-        /// Such as billing, billing-setup, api or setup.
-        #[arg(default_value = "billing")]
-        service: String,
-    },
-    /// Make this database the charging authority (once, on a fresh database).
-    EnableWriter {
-        #[arg(long)]
-        yes: bool,
-    },
-    /// Check production's Stripe account: products, prices and Customer Portal; --apply makes
-    /// what's missing. Runs a one-off billing container; the running billing is left alone.
-    StripeSetup(StripeSetup),
-}
-
 pub fn dispatch(workspace: &Workspace, command: CloudCommand) -> Result<()> {
     match command {
-        CloudCommand::Dev { command } => {
-            let root = checkout(workspace)?;
-            match command {
-                DevCommand::StripeSetup(options) => {
-                    if !private(&root.join(DEV_DATABASE_ENV), false)? {
-                        bail!("{DEV_DATABASE_ENV} is missing; misty-cloud's README says what goes in it.");
-                    }
-                    // Build the checkout's billing, so the one-off run has its catalog command.
-                    stripe_setup(&root, dev_compose, &["--build"], &options)
-                }
-            }
-        }
         CloudCommand::Release { version } => release(&checkout(workspace)?, &version),
         CloudCommand::PinServer { commit } => pin_server(&checkout(workspace)?, &commit),
         CloudCommand::Ship { host, path, up } => ship(&checkout(workspace)?, &host, &path, up),
+        CloudCommand::Dev { command } => stack(&checkout(workspace)?, Environment::Dev, command),
         CloudCommand::Prod { command } => {
-            let root = deploy_folder(workspace)?;
-            match command {
-                ProdCommand::Check => check(&root),
-                ProdCommand::Up => up(&root),
-                ProdCommand::Down => compose(&root, &["down", "--remove-orphans"]),
-                ProdCommand::Logs { service } => {
-                    if service.starts_with('-') {
-                        bail!("Name a service, such as billing or setup.");
-                    }
-                    compose(&root, &["logs", "--follow", &service])
-                }
-                ProdCommand::StripeSetup(options) => {
-                    check(&root)?;
-                    stripe_setup(&root, prod_compose, &[], &options)
-                }
-                ProdCommand::EnableWriter { yes } => {
-                    if !yes {
-                        bail!("This makes this database the charging authority; rerun with --yes.");
-                    }
-                    check(&root)?;
-                    prod_compose(&[
-                        "exec",
-                        "-T",
-                        "billing-postgres",
-                        "psql",
-                        "-U",
-                        "billing_owner",
-                        "-d",
-                        "misty_billing",
-                        "-v",
-                        "ON_ERROR_STOP=1",
-                        "-q",
-                    ])
-                    .run_with_input(&root, ENABLE_WRITER.as_bytes())?;
-                    println!("Billing writer enabled.");
-                    Ok(())
-                }
-            }
+            stack(&deploy_folder(workspace)?, Environment::Prod, command)
         }
     }
+}
+
+fn stack(root: &Path, environment: Environment, command: StackCommand) -> Result<()> {
+    match command {
+        StackCommand::Check => check(root, environment),
+        StackCommand::Up => up(root, environment),
+        StackCommand::Down => {
+            billing_compose(environment, &["down", "--remove-orphans"]).run(root)?;
+            if environment == Environment::Prod {
+                server_compose(&["down", "--remove-orphans"]).run(root)?;
+            }
+            Ok(())
+        }
+        StackCommand::Logs { service } => {
+            if service.starts_with('-') {
+                bail!("Name a service, such as billing or billing-setup.");
+            }
+            let logs = ["logs", "--follow", service.as_str()];
+            if environment == Environment::Prod && !billing_service(&service) {
+                server_compose(&logs).run(root)
+            } else {
+                billing_compose(environment, &logs).run(root)
+            }
+        }
+        StackCommand::StripeSetup(options) => {
+            check(root, environment)?;
+            // Development builds the checkout's billing, so the one-off run has its catalog
+            // command; production runs the pinned image.
+            let build: &[&str] = match environment {
+                Environment::Dev => &["--build"],
+                Environment::Prod => &[],
+            };
+            stripe_setup(root, environment, build, &options)
+        }
+        StackCommand::EnableWriter { yes } => {
+            if !yes {
+                bail!("This makes this database the charging authority; rerun with --yes.");
+            }
+            check(root, environment)?;
+            billing_compose(
+                environment,
+                &[
+                    "exec",
+                    "-T",
+                    "billing-postgres",
+                    "psql",
+                    "-U",
+                    "billing_owner",
+                    "-d",
+                    "misty_billing",
+                    "-v",
+                    "ON_ERROR_STOP=1",
+                    "-q",
+                ],
+            )
+            .run_with_input(root, ENABLE_WRITER.as_bytes())?;
+            println!("Billing writer enabled.");
+            Ok(())
+        }
+    }
+}
+
+/// Whether a service is billing's (compose.yml's) rather than the server's.
+fn billing_service(service: &str) -> bool {
+    service.starts_with("billing") || service == "stripe-listen"
 }
 
 const ENABLE_WRITER: &str = "BEGIN;
@@ -201,7 +250,7 @@ fn checkout(workspace: &Workspace) -> Result<PathBuf> {
         .and_then(|directory| crate::hooks::toplevel(&directory).ok())
         .filter(|root| root.join("cmd/misty-cloud").is_dir());
     let root = here.unwrap_or_else(|| workspace.cloud.clone());
-    if !root.join("cmd/misty-cloud").is_dir() || !root.join("compose.prod.yml").is_file() {
+    if !root.join("cmd/misty-cloud").is_dir() || !root.join(BILLING_COMPOSE).is_file() {
         bail!(
             "This needs the misty-cloud checkout, here or at {}",
             workspace.cloud.display()
@@ -211,7 +260,7 @@ fn checkout(workspace: &Workspace) -> Result<PathBuf> {
 }
 
 fn is_deploy_folder(directory: &Path) -> bool {
-    directory.join("compose.prod.yml").is_file() && directory.join(PROD_FILES).is_file()
+    directory.join(BILLING_COMPOSE).is_file() && directory.join(PROD_FILES).is_file()
 }
 
 /// The deploy folder: the current folder or one above it, else ~/misty-cloud (the VPS's), else
@@ -230,40 +279,39 @@ fn deploy_folder(workspace: &Workspace) -> Result<PathBuf> {
         .chain([workspace.cloud.clone()])
         .find(|directory| is_deploy_folder(directory))
         .with_context(|| {
-            "This needs misty-cloud's deploy folder (compose.prod.yml and deploy/prod-files.txt): \
+            "This needs misty-cloud's deploy folder (compose.yml and deploy/prod-files.txt): \
              run it there, or `misty cloud ship` one to ~/misty-cloud"
         })
 }
 
-/// docker compose for the stack. Both pins go to the CLI, not to an include's env_file:
-/// compose.prod.yml interpolates them itself, and the included server file inherits them.
-fn prod_compose(arguments: &[&str]) -> CommandSpec {
-    CommandSpec::new("docker")
+/// docker compose for billing (compose.yml) with one environment's settings. Compose reads the
+/// environment's compose.env itself (the project name, the profiles, the server's network);
+/// production also passes the billing pin, so it runs the published image instead of building.
+fn billing_compose(environment: Environment, arguments: &[&str]) -> CommandSpec {
+    let compose_env = environment.file(COMPOSE_ENV);
+    let mut spec = CommandSpec::new("docker")
         .env("COMPOSE_DISABLE_ENV_FILE", "1")
         .env_remove("COMPOSE_ENV_FILES")
-        .args([
-            "compose",
-            "--env-file",
-            SERVER_VERSION,
-            "--env-file",
-            BILLING_VERSION,
-        ])
-        .args(["--file", "compose.prod.yml"])
-        .args(arguments)
+        .env_remove("COMPOSE_PROJECT_NAME")
+        .env_remove("COMPOSE_PROFILES")
+        .args(["compose", "--env-file", compose_env.as_str()]);
+    if environment == Environment::Prod {
+        spec = spec.args(["--env-file", BILLING_VERSION]);
+    }
+    spec.args(["--file", BILLING_COMPOSE]).args(arguments)
 }
 
-/// docker compose for the development stack, as misty-cloud's README runs it.
-fn dev_compose(arguments: &[&str]) -> CommandSpec {
+/// docker compose for production's server: misty-server's compose.yml at the pinned commit
+/// with misty-cloud's override, as project `misty`, the pin passed to the CLI so the files
+/// interpolate it.
+fn server_compose(arguments: &[&str]) -> CommandSpec {
     CommandSpec::new("docker")
         .env("COMPOSE_DISABLE_ENV_FILE", "1")
         .env_remove("COMPOSE_ENV_FILES")
-        .args([
-            "compose",
-            "--env-file",
-            DEV_DATABASE_ENV,
-            "--file",
-            DEV_COMPOSE,
-        ])
+        .env_remove("COMPOSE_PROJECT_NAME")
+        .env_remove("COMPOSE_PROFILES")
+        .args(["compose", "--env-file", SERVER_VERSION])
+        .args(["--file", SERVER_COMPOSE, "--file", SERVER_OVERRIDE])
         .args(arguments)
 }
 
@@ -273,7 +321,7 @@ fn dev_compose(arguments: &[&str]) -> CommandSpec {
 /// the Stripe key from its own env file; it never passes through here.
 fn stripe_setup(
     root: &Path,
-    compose: fn(&[&str]) -> CommandSpec,
+    environment: Environment,
     run_options: &[&str],
     options: &StripeSetup,
 ) -> Result<()> {
@@ -284,7 +332,7 @@ fn stripe_setup(
         if apply {
             arguments.push("--apply");
         }
-        compose(&arguments)
+        billing_compose(environment, &arguments)
     };
     catalog(false).run(root)?;
     if !options.apply {
@@ -306,27 +354,55 @@ fn stripe_setup(
     catalog(true).run(root)
 }
 
-fn compose(root: &Path, arguments: &[&str]) -> Result<()> {
-    prod_compose(arguments).run(root)
-}
-
-fn up(root: &Path) -> Result<()> {
-    check(root)?;
-    let plain = CommandSpec::new("docker")
-        .args([
-            "ps",
-            "-q",
-            "--filter",
-            "label=com.docker.compose.project=misty",
-        ])
-        .capture(root)?;
-    if !plain.trim().is_empty() {
-        bail!("Stop the plain misty-server deploy first: docker compose -p misty down (no --volumes).");
+/// Production starts the server, then billing on its network; development starts billing on
+/// the network of the server `misty server up` runs.
+fn up(root: &Path, environment: Environment) -> Result<()> {
+    check(root, environment)?;
+    match environment {
+        Environment::Prod => {
+            // Before billing ran from compose.yml, the server and billing were one project.
+            let combined = CommandSpec::new("docker")
+                .args([
+                    "ps",
+                    "-aq",
+                    "--filter",
+                    "label=com.docker.compose.project=misty-cloud-production",
+                    "--filter",
+                    "label=com.docker.compose.service=api",
+                ])
+                .capture(root)?;
+            if !combined.trim().is_empty() {
+                bail!(
+                    "Stop the old combined stack first (its volumes stay): \
+                     docker compose -p misty-cloud-production down (no --volumes)."
+                );
+            }
+            server_compose(&["pull"]).run(root)?;
+            // The server's compose.yml keeps its build: sections; the VPS never builds.
+            server_compose(&["up", "--detach", "--no-build", "--remove-orphans"]).run(root)?;
+            billing_compose(environment, &["pull"]).run(root)?;
+            billing_compose(
+                environment,
+                &["up", "--detach", "--no-build", "--remove-orphans"],
+            )
+            .run(root)?;
+        }
+        Environment::Dev => {
+            let network = settings_value(root, environment, COMPOSE_ENV, "MISTY_SERVER_NETWORK")?;
+            if !CommandSpec::new("docker")
+                .args(["network", "inspect", network.as_str()])
+                .succeeds(root)
+            {
+                bail!("The server's network {network} isn't there: start the server first (misty server up).");
+            }
+            billing_compose(
+                environment,
+                &["up", "--detach", "--build", "--remove-orphans"],
+            )
+            .run(root)?;
+        }
     }
-    compose(root, &["pull"])?;
-    // The server's compose.yml keeps its build: sections; the VPS never builds.
-    compose(root, &["up", "--detach", "--no-build", "--remove-orphans"])?;
-    wait_for_billing()
+    wait_for_billing(environment)
 }
 
 /// How long `up` waits for billing to answer once Compose has started it.
@@ -334,7 +410,7 @@ const BILLING_WAIT: Duration = Duration::from_secs(180);
 
 /// Waits for billing's health check on the port Compose publishes it on (BILLING_HOST_PORT,
 /// 8091 unless the shell sets it).
-fn wait_for_billing() -> Result<()> {
+fn wait_for_billing(environment: Environment) -> Result<()> {
     let port = std::env::var("BILLING_HOST_PORT")
         .ok()
         .and_then(|port| port.trim().parse::<u16>().ok())
@@ -346,14 +422,23 @@ fn wait_for_billing() -> Result<()> {
         if started.elapsed() > BILLING_WAIT {
             bail!(
                 "Billing didn't answer http://{address}/health within {} seconds. See \
-                 misty cloud prod logs billing (and billing-setup, setup).",
-                BILLING_WAIT.as_secs()
+                 misty cloud {} logs billing (and billing-setup, billing-migrate).",
+                BILLING_WAIT.as_secs(),
+                environment.name()
             );
         }
         thread::sleep(Duration::from_secs(2));
     }
     println!("Billing is healthy.");
     Ok(())
+}
+
+/// One value of a file in an environment's settings folder.
+fn settings_value(root: &Path, environment: Environment, file: &str, name: &str) -> Result<String> {
+    Ok(env_value(
+        &read_env(&root.join(environment.file(file)))?,
+        name,
+    ))
 }
 
 /// KEY=value pairs of an env file, the last one of each name winning.
@@ -424,51 +509,89 @@ fn billing_pin_problem(values: &[(String, String)]) -> Option<String> {
     })
 }
 
-/// The pins, the settings files, the server's volumes and the Compose file.
-fn check(root: &Path) -> Result<()> {
-    let mut problems = server_pin_problems(&read_env(&root.join(SERVER_VERSION))?);
-    problems.extend(billing_pin_problem(&read_env(&root.join(BILLING_VERSION))?));
-    if !problems.is_empty() {
-        bail!(problems.join("\n"));
+/// The settings folder and billing's Compose file; in production also the pins, the server's
+/// settings and volumes, its Compose files, and that every image is pinned by digest.
+fn check(root: &Path, environment: Environment) -> Result<()> {
+    if environment == Environment::Prod {
+        let mut problems = server_pin_problems(&read_env(&root.join(SERVER_VERSION))?);
+        problems.extend(billing_pin_problem(&read_env(&root.join(BILLING_VERSION))?));
+        if !problems.is_empty() {
+            bail!(problems.join("\n"));
+        }
+
+        let server_env = match std::env::var_os("MISTY_ENV_DIR") {
+            Some(directory) => PathBuf::from(directory),
+            None => dirs::home_dir()
+                .context("no home folder")?
+                .join(".misty/.env/server"),
+        };
+        private_folder(&server_env, true)?;
+        for name in ["misty.env", "cloudflare.env", "google.env"] {
+            private(&server_env.join(name), true)?;
+        }
+        if !private(&server_env.join("mailjet.env"), false)? {
+            eprintln!(
+                "warning: no {}: the server sends no email.",
+                server_env.join("mailjet.env").display()
+            );
+        }
     }
 
-    let server_env = match std::env::var_os("MISTY_ENV_DIR") {
-        Some(directory) => PathBuf::from(directory),
-        None => dirs::home_dir()
-            .context("no home folder")?
-            .join(".misty/.env/server"),
-    };
-    private_folder(&server_env, true)?;
-    for name in ["misty.env", "cloudflare.env", "google.env"] {
-        private(&server_env.join(name), true)?;
+    // The same files in either environment; only their values differ.
+    let folder = environment.folder();
+    private_folder(&root.join(&folder), true)?;
+    for name in SETTINGS {
+        private(&root.join(environment.file(name)), true)?;
     }
-    if !private(&server_env.join("mailjet.env"), false)? {
-        eprintln!(
-            "warning: no {}: the server sends no email.",
-            server_env.join("mailjet.env").display()
+    let named = settings_value(root, environment, COMPOSE_ENV, "MISTY_CLOUD_ENV")?;
+    if named != environment.name() {
+        bail!(
+            "MISTY_CLOUD_ENV in {} is {named:?}; it must be {}.",
+            environment.file(COMPOSE_ENV),
+            environment.name()
         );
     }
-
-    for folder in [".env", ".env/prod"] {
-        private_folder(&root.join(folder), false)?;
+    let stripe_file = environment.file("stripe.env");
+    let stripe = read_env(&root.join(&stripe_file))?;
+    let key = env_value(&stripe, "STRIPE_SECRET_KEY");
+    let live = key.starts_with("sk_live_") || key.starts_with("rk_live_");
+    if key.is_empty() {
+        eprintln!("warning: {stripe_file} has no STRIPE_SECRET_KEY: nothing is sold.");
+    } else if environment == Environment::Dev && live {
+        bail!("{stripe_file} holds a live Stripe key; development only runs on a test key.");
+    } else if environment == Environment::Prod && !live {
+        eprintln!(
+            "warning: {stripe_file} holds a test Stripe key: production takes no real payments."
+        );
     }
-    if private(&root.join(STRIPE_ENV), false)? {
-        let stripe = read_env(&root.join(STRIPE_ENV))?;
-        if env_value(&stripe, "STRIPE_SECRET_KEY").is_empty() {
-            eprintln!("warning: {STRIPE_ENV} has no STRIPE_SECRET_KEY: nothing is sold.");
+    for name in RETIRED_STRIPE {
+        if stripe.iter().any(|(key, _)| key == name) {
+            eprintln!("warning: {name} in {stripe_file} isn't read any more; delete it.");
         }
-        for name in RETIRED_STRIPE {
-            if stripe.iter().any(|(key, _)| key == name) {
-                eprintln!("warning: {name} in {STRIPE_ENV} isn't read any more; delete it.");
-            }
-        }
-    } else {
-        eprintln!("warning: no {STRIPE_ENV}: nothing is sold.");
+    }
+    if settings_value(
+        root,
+        environment,
+        "misty-server.env",
+        "MISTY_OPERATOR_TOKEN",
+    )?
+    .is_empty()
+    {
+        eprintln!(
+            "warning: {} has no MISTY_OPERATOR_TOKEN: paid events wait until it's set.",
+            environment.file("misty-server.env")
+        );
     }
     for file in RETIRED_FILES {
         if root.join(file).exists() {
-            eprintln!("warning: {file} isn't read any more (billing-setup makes what it held); delete it.");
+            eprintln!("warning: {file} isn't read any more; delete it.");
         }
+    }
+
+    billing_compose(environment, &["config", "--quiet"]).run(root)?;
+    if environment == Environment::Dev {
+        println!("Development configuration is valid.");
+        return Ok(());
     }
 
     if !CommandSpec::new("docker")
@@ -481,8 +604,9 @@ fn check(root: &Path) -> Result<()> {
              Otherwise check the plain misty-server deploy's volume names."
         );
     }
-    prod_compose(&["config", "--quiet"]).run(root)?;
-    let images = prod_compose(&["config", "--images"]).capture(root)?;
+    server_compose(&["config", "--quiet"]).run(root)?;
+    let mut images = server_compose(&["config", "--images"]).capture(root)?;
+    images.push_str(&billing_compose(environment, &["config", "--images"]).capture(root)?);
     let loose: Vec<&str> = images
         .lines()
         .map(str::trim)
@@ -890,8 +1014,8 @@ mod tests {
 
     #[test]
     fn shipping_reads_the_file_list_and_plain_names() {
-        let files = prod_files("# comment\ncompose.prod.yml\n\n  deploy/billing/version.env\n");
-        assert_eq!(files, ["compose.prod.yml", "deploy/billing/version.env"]);
+        let files = prod_files("# comment\ncompose.yml\n\n  deploy/billing/version.env\n");
+        assert_eq!(files, ["compose.yml", "deploy/billing/version.env"]);
         assert!(
             plain_name("misty-vps")
                 && plain_name("misty-cloud")
