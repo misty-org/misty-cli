@@ -24,6 +24,9 @@ pub(super) const FILES: &[FileSpec] = &[
             "MISTY_SIGNUP_LIMITS",
             // Space levels raised by Boosts, Misty Cloud's; unset, Spaces are unlimited.
             "MISTY_SPACE_LEVELS",
+            // The Google account that owns the server: it sees the server's alerts and is
+            // always let in. Unset, the server has no owner; signing up first doesn't make one.
+            "MISTY_OWNER_EMAIL",
             // Only these emails may make an account or sign in.
             "MISTY_ALLOWED_EMAILS",
             "MISTY_ALLOWED_ORIGINS",
@@ -37,6 +40,21 @@ pub(super) const FILES: &[FileSpec] = &[
             "PORT",
             "TRUST_PROXY_HEADERS",
             "TRUSTED_PROXY_CIDRS",
+        ],
+    },
+    // Compose reads these where it runs, to choose images and tunnel routes; no container
+    // gets this file. compose.dev.yml uses MISTY_API_IMAGE; compose.yml, a deployed
+    // server's, uses all three.
+    FileSpec {
+        path: "compose.env",
+        names: &[
+            // A published API image to run instead of building this checkout, such as
+            // ghcr.io/misty-org/misty-server-api:<commit SHA>.
+            "MISTY_API_IMAGE",
+            // The same for the tools image (setup, migrate, backups, alerts, console).
+            "MISTY_TOOLS_IMAGE",
+            // More hostnames the tunnel publishes: host=service, comma-separated.
+            "MISTY_TUNNEL_EXTRA_INGRESS",
         ],
     },
     FileSpec {

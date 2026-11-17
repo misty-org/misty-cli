@@ -245,3 +245,84 @@ fn setup_is_idempotent_and_setting_values_stay_private() {
     .unwrap();
     assert!(validate(&workspace).is_err());
 }
+
+#[test]
+fn the_owner_email_is_one_address_or_unset() {
+    for value in ["", "  ", "Owner@Misty.Example", " owner@misty.example "] {
+        assert!(validate::validate_owner_email(value).is_ok(), "{value:?}");
+    }
+    for value in [
+        "owner",
+        "@misty.example",
+        "owner@",
+        "a@b@misty.example",
+        "the owner@misty.example",
+    ] {
+        assert!(validate::validate_owner_email(value).is_err(), "{value:?}");
+    }
+}
+
+#[test]
+fn published_images_come_from_one_release() {
+    let api = "ghcr.io/misty-org/misty-server-api:0a9c9318@sha256:abc";
+    let tools = "ghcr.io/misty-org/misty-server-tools:0a9c9318@sha256:def";
+    assert!(validate::validate_images(None, None).is_ok());
+    assert!(validate::validate_images(Some(""), Some("")).is_ok());
+    assert!(validate::validate_images(Some(api), None).is_ok());
+    assert!(validate::validate_images(Some(api), Some(tools)).is_ok());
+    assert!(validate::validate_images(Some("misty-api:mine"), Some(tools)).is_ok());
+    let other = "ghcr.io/misty-org/misty-server-tools:v1.2.3";
+    assert!(validate::validate_images(Some(api), Some(other)).is_err());
+    assert!(validate::validate_images(Some("https://ghcr.io/misty-server-api:1"), None).is_err());
+    assert!(validate::validate_images(None, Some("misty tools")).is_err());
+}
+
+// The same cases as misty-server's deploy/setup/ingress_test.go.
+#[test]
+fn extra_ingress_is_read_as_setup_reads_it() {
+    let read = |value| validate::parse_extra_ingress(value, "cloud.misty.example");
+    assert!(read(" , ").unwrap().is_empty());
+    assert_eq!(
+        read(" Billing.misty.example=http://billing:8091 , status.misty.example=https://status:8443/,")
+            .unwrap(),
+        [
+            ("billing.misty.example".to_owned(), "http://billing:8091".to_owned()),
+            ("status.misty.example".to_owned(), "https://status:8443".to_owned()),
+        ]
+    );
+    for value in [
+        "billing.misty.example",
+        "=http://billing:8091",
+        "billing.misty.example=",
+        "billing=http://billing:8091",
+        "https://billing.misty.example=http://billing:8091",
+        "bill_ing.misty.example=http://billing:8091",
+        "cloud.misty.example=http://billing:8091",
+        "billing.misty.example=http://billing:8091,billing.misty.example=http://other:80",
+        "billing.misty.example=billing:8091",
+        "billing.misty.example=ftp://billing:21",
+        "billing.misty.example=http://billing:8091/v1",
+        "billing.misty.example=http://billing:8091?x=1",
+        "billing.misty.example=http://user@billing:8091",
+        "billing.misty.example=http://",
+    ] {
+        let error = read(value).expect_err(value).to_string();
+        assert!(
+            error.contains("MISTY_TUNNEL_EXTRA_INGRESS"),
+            "{value:?}: {error}"
+        );
+    }
+}
+
+#[test]
+fn compose_settings_have_their_own_file() {
+    let owners = ownership().unwrap();
+    for name in [
+        "MISTY_API_IMAGE",
+        "MISTY_TOOLS_IMAGE",
+        "MISTY_TUNNEL_EXTRA_INGRESS",
+    ] {
+        assert_eq!(owners[name], "compose.env");
+    }
+    assert_eq!(owners["MISTY_OWNER_EMAIL"], "runtime.env");
+}

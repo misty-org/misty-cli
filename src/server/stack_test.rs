@@ -106,7 +106,10 @@ impl Stack {
 
         fs::create_dir_all(&env_dir)?;
         let fake = format!("http://host.docker.internal:{}", self.fake_port);
-        fs::write(env_dir.join("misty.env"), "MISTY_HOSTNAME=cloud.misty.example\n")?;
+        fs::write(
+            env_dir.join("misty.env"),
+            "MISTY_HOSTNAME=cloud.misty.example\nMISTY_OWNER_EMAIL=owner@misty.example\n",
+        )?;
         fs::write(
             env_dir.join("cloudflare.env"),
             format!(
@@ -158,8 +161,15 @@ services:
             bail!("FAIL: the console printed no sign-in link");
         }
 
+        step("the owner's email can't sign up with a password");
+        expect(
+            self.register("owner")?,
+            "409",
+            "MISTY_OWNER_EMAIL registered with a password",
+        )?;
+
         step("the first account registers; the next needs an invitation");
-        expect(self.register("owner")?, "201", "the first account could not register")?;
+        expect(self.register("first")?, "201", "the first account could not register")?;
         expect(
             self.register("stranger")?,
             "403",
@@ -200,7 +210,7 @@ services:
         self.compose(&["up", "-d"]).run(&self.server)?;
         self.wait_healthy()?;
         expect(
-            self.register("owner")?,
+            self.register("first")?,
             "409",
             "the restored database lost its account",
         )?;
@@ -234,8 +244,15 @@ services:
         Ok(())
     }
 
+    /// Always this checkout's images and only the server's own hostname: published images
+    /// or extra tunnel routes from the shell or a .env beside compose.yml stay out.
     fn compose(&self, arguments: &[&str]) -> CommandSpec {
         CommandSpec::new("docker")
+            .env("COMPOSE_DISABLE_ENV_FILE", "1")
+            .env_remove("COMPOSE_ENV_FILES")
+            .env_remove("MISTY_API_IMAGE")
+            .env_remove("MISTY_TOOLS_IMAGE")
+            .env_remove("MISTY_TUNNEL_EXTRA_INGRESS")
             .args(["compose", "-p", self.project.as_str(), "-f"])
             .arg(self.server.join("compose.yml").as_os_str())
             .arg("-f")
