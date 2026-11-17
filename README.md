@@ -50,6 +50,8 @@ step at a time. `--workspace <folder>` or `MISTY_ROOT` points it at another fold
 | `misty cloud pin-server <commit>` | Pins the misty-server release production runs: its `compose.yml` and published images, in misty-cloud's `deploy/misty-server/` (commit both). |
 | `misty cloud ship [--host misty-vps] [--path misty-cloud] [--up]` | Copies the committed deploy files (`deploy/prod-files.txt`) to the VPS, never `.env/`; `--up` then starts the stack there. |
 | `misty cloud prod check\|up\|down\|logs [service]\|enable-writer --yes` | Operates Misty Cloud's production stack (the server and billing); run it on the VPS, in the deploy folder (`~/misty-cloud`). |
+| `misty cloud prod stripe-setup [--apply [--yes]]` | Checks production's Stripe account: the Misty+ and Boost products, lookup-key prices and Customer Portal with billing's `catalog`, in a one-off container; `--apply` shows the dry run, asks, then creates what's missing. |
+| `misty cloud dev stripe-setup [--apply [--yes]]` | The same against the sandbox key, on misty-cloud's `compose.dev.yml`, in the misty-cloud checkout. |
 | `misty build` | Builds the app, step by step. |
 | `misty release [--dry-run]` | Publishes a release, step by step: start it, build it on each system, make it public. |
 

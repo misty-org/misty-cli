@@ -7,6 +7,7 @@
 
 use std::{
     fs,
+    io::{self, IsTerminal},
     net::SocketAddr,
     path::{Path, PathBuf},
     process::Stdio,
@@ -26,6 +27,10 @@ const BILLING_VERSION: &str = "deploy/billing/version.env";
 const SERVER_VERSION: &str = "deploy/misty-server/version.env";
 const SERVER_COMPOSE: &str = "deploy/misty-server/compose.yml";
 const PROD_FILES: &str = "deploy/prod-files.txt";
+/// The development stack's Compose file and the private values it interpolates; billing reads
+/// the sandbox Stripe key from .env/dev/integrations/stripe.env.
+const DEV_COMPOSE: &str = "compose.dev.yml";
+const DEV_DATABASE_ENV: &str = ".env/dev/database.env";
 /// Billing's one setting, made on the VPS and never copied.
 const STRIPE_ENV: &str = ".env/prod/stripe.env";
 /// Files billing used to need; billing-setup makes what they held now.
@@ -72,6 +77,28 @@ pub enum CloudCommand {
         #[command(subcommand)]
         command: ProdCommand,
     },
+    /// Operate the development stack (compose.dev.yml), in the misty-cloud checkout.
+    Dev {
+        #[command(subcommand)]
+        command: DevCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DevCommand {
+    /// Check the sandbox Stripe account's products, prices and Customer Portal; --apply makes
+    /// what's missing.
+    StripeSetup(StripeSetup),
+}
+
+#[derive(Debug, Args)]
+pub struct StripeSetup {
+    /// Create what's missing, after showing the dry run and asking.
+    #[arg(long)]
+    apply: bool,
+    /// Apply without asking (required when not on a terminal).
+    #[arg(long, requires = "apply")]
+    yes: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -93,10 +120,25 @@ pub enum ProdCommand {
         #[arg(long)]
         yes: bool,
     },
+    /// Check production's Stripe account: products, prices and Customer Portal; --apply makes
+    /// what's missing. Runs a one-off billing container; the running billing is left alone.
+    StripeSetup(StripeSetup),
 }
 
 pub fn dispatch(workspace: &Workspace, command: CloudCommand) -> Result<()> {
     match command {
+        CloudCommand::Dev { command } => {
+            let root = checkout(workspace)?;
+            match command {
+                DevCommand::StripeSetup(options) => {
+                    if !private(&root.join(DEV_DATABASE_ENV), false)? {
+                        bail!("{DEV_DATABASE_ENV} is missing; misty-cloud's README says what goes in it.");
+                    }
+                    // Build the checkout's billing, so the one-off run has its catalog command.
+                    stripe_setup(&root, dev_compose, &["--build"], &options)
+                }
+            }
+        }
         CloudCommand::Release { version } => release(&checkout(workspace)?, &version),
         CloudCommand::PinServer { commit } => pin_server(&checkout(workspace)?, &commit),
         CloudCommand::Ship { host, path, up } => ship(&checkout(workspace)?, &host, &path, up),
@@ -111,6 +153,10 @@ pub fn dispatch(workspace: &Workspace, command: CloudCommand) -> Result<()> {
                         bail!("Name a service, such as billing or setup.");
                     }
                     compose(&root, &["logs", "--follow", &service])
+                }
+                ProdCommand::StripeSetup(options) => {
+                    check(&root)?;
+                    stripe_setup(&root, prod_compose, &[], &options)
                 }
                 ProdCommand::EnableWriter { yes } => {
                     if !yes {
@@ -204,6 +250,60 @@ fn prod_compose(arguments: &[&str]) -> CommandSpec {
         ])
         .args(["--file", "compose.prod.yml"])
         .args(arguments)
+}
+
+/// docker compose for the development stack, as misty-cloud's README runs it.
+fn dev_compose(arguments: &[&str]) -> CommandSpec {
+    CommandSpec::new("docker")
+        .env("COMPOSE_DISABLE_ENV_FILE", "1")
+        .env_remove("COMPOSE_ENV_FILES")
+        .args([
+            "compose",
+            "--env-file",
+            DEV_DATABASE_ENV,
+            "--file",
+            DEV_COMPOSE,
+        ])
+        .args(arguments)
+}
+
+/// Runs billing's one-shot `catalog` in its own container (`run --rm --no-deps`, so the
+/// running billing is neither started nor restarted): always the dry run first, then, with
+/// --apply and a yes (asked on a terminal, --yes otherwise), `catalog --apply`. Billing reads
+/// the Stripe key from its own env file; it never passes through here.
+fn stripe_setup(
+    root: &Path,
+    compose: fn(&[&str]) -> CommandSpec,
+    run_options: &[&str],
+    options: &StripeSetup,
+) -> Result<()> {
+    let catalog = |apply: bool| {
+        let mut arguments = vec!["run", "--rm", "--no-deps"];
+        arguments.extend_from_slice(run_options);
+        arguments.extend(["billing", "catalog"]);
+        if apply {
+            arguments.push("--apply");
+        }
+        compose(&arguments)
+    };
+    catalog(false).run(root)?;
+    if !options.apply {
+        println!("That was a dry run; nothing changed. Add --apply to create what's missing.");
+        return Ok(());
+    }
+    if !options.yes {
+        if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+            bail!("Not on a terminal: rerun with --apply --yes to create what's missing.");
+        }
+        let go = cliclack::confirm("Create what's missing in this Stripe account?")
+            .initial_value(false)
+            .interact()?;
+        if !go {
+            println!("Nothing changed.");
+            return Ok(());
+        }
+    }
+    catalog(true).run(root)
 }
 
 fn compose(root: &Path, arguments: &[&str]) -> Result<()> {

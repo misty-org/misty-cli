@@ -40,6 +40,11 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "cloud", "prod", "logs", "billing-setup"],
         vec!["misty", "cloud", "pin-server", "0a9c93180a9c93180a9c93180a9c93180a9c9318"],
         vec!["misty", "cloud", "ship"],
+        vec!["misty", "cloud", "prod", "stripe-setup"],
+        vec!["misty", "cloud", "prod", "stripe-setup", "--apply"],
+        vec!["misty", "cloud", "prod", "stripe-setup", "--apply", "--yes"],
+        vec!["misty", "cloud", "dev", "stripe-setup"],
+        vec!["misty", "cloud", "dev", "stripe-setup", "--apply", "--yes"],
         vec!["misty", "cloud", "ship", "--host", "misty-vps", "--path", "misty-cloud", "--up"],
     ] {
         Cli::try_parse_from(arguments).unwrap();
@@ -61,6 +66,9 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "setup", "cloudflare", "--target", "prod"],
         // Releases only go through the guided flow.
         vec!["misty", "release", "publish", "0.1.0"],
+        // --yes only skips the question --apply asks.
+        vec!["misty", "cloud", "prod", "stripe-setup", "--yes"],
+        vec!["misty", "cloud", "dev", "stripe-setup", "--yes"],
     ] {
         assert!(Cli::try_parse_from(arguments).is_err());
     }
