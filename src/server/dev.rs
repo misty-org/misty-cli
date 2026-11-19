@@ -26,8 +26,74 @@ pub fn up(workspace: &Workspace, build: bool, verbose: bool) -> Result<()> {
     }
     status(workspace)?;
     println!("API: {}", development_api_url());
-    println!("Worker deployment: misty server deploy");
+    deploy_worker_if_changed(workspace);
     Ok(())
+}
+
+/// Deploys the development Worker when its source differs from the last deploy. A Worker left
+/// behind its source refuses the rooms added since (partyserver answers a room type it has no
+/// binding for with 400 "Invalid request"), so every new kind of item fails to connect. A failed
+/// deploy only warns: the stack itself is up.
+fn deploy_worker_if_changed(workspace: &Workspace) {
+    let fingerprint = match worker_fingerprint(workspace) {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => {
+            eprintln!("Couldn't read the Worker's source ({error}); deploy it with misty server deploy");
+            return;
+        }
+    };
+    let deployed = fs::read_to_string(worker_stamp(workspace)).unwrap_or_default();
+    if deployed.trim() == fingerprint {
+        println!("Worker: up to date");
+        return;
+    }
+    println!("The Worker's source changed since it was last deployed.");
+    if let Err(error) = deploy_development(workspace) {
+        eprintln!("Worker deploy failed: {error:#}");
+        eprintln!("See .misty/logs/deploy.log, then run misty server deploy");
+    }
+}
+
+/// Where the fingerprint of the last deployed Worker source is kept.
+fn worker_stamp(workspace: &Workspace) -> std::path::PathBuf {
+    workspace.server.join(".misty/worker-deployed")
+}
+
+/// A stable fingerprint (FNV-1a, 64-bit) of what `wrangler deploy` uploads and how: the Worker's
+/// `src`, its wrangler config and its package files, by path and content.
+fn worker_fingerprint(workspace: &Workspace) -> Result<String> {
+    let root = workspace.server.join("services/journal-collab");
+    let mut files: Vec<std::path::PathBuf> = walkdir::WalkDir::new(root.join("src"))
+        .into_iter()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_file())
+        .map(|entry| entry.into_path())
+        .collect();
+    for name in ["wrangler.jsonc", "package.json", "package-lock.json", "tsconfig.json"] {
+        let path = root.join(name);
+        if path.is_file() {
+            files.push(path);
+        }
+    }
+    if files.is_empty() {
+        bail!("no Worker source in {}", root.display());
+    }
+    files.sort();
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for path in files {
+        let relative = path.strip_prefix(&root).unwrap_or(&path);
+        feed(relative.to_string_lossy().as_bytes());
+        feed(&[0]);
+        feed(&fs::read(&path)?);
+        feed(&[0]);
+    }
+    Ok(format!("{hash:016x}"))
 }
 
 pub fn initialize_development_secrets(workspace: &Workspace) -> Result<()> {
@@ -110,6 +176,8 @@ pub(super) fn diagnostic_secrets(workspace: &Workspace) -> Result<Vec<String>> {
 
 pub fn deploy_development(workspace: &Workspace) -> Result<()> {
     environment::check(workspace)?;
+    // Taken before the deploy, so an edit made while it runs still counts as changed.
+    let fingerprint = worker_fingerprint(workspace).ok();
     println!("Deploying development collaboration Worker…");
     development_compose()
         .args(["run", "--rm", "--no-deps", "--build", "setup", "deploy"])
@@ -117,5 +185,10 @@ pub fn deploy_development(workspace: &Workspace) -> Result<()> {
             &workspace.server,
             &workspace.server.join(".misty/logs/deploy.log"),
             &diagnostic_secrets(workspace)?,
-        )
+        )?;
+    if let Some(fingerprint) = fingerprint {
+        fs::write(worker_stamp(workspace), format!("{fingerprint}\n"))?;
+    }
+    println!("Worker deployed.");
+    Ok(())
 }
