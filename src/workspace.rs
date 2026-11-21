@@ -54,6 +54,21 @@ impl Workspace {
         })
     }
 
+    /// The docs site, a sibling checkout the website starts with itself.
+    pub fn docs(&self) -> PathBuf {
+        self.root.join("misty-docs")
+    }
+
+    /// The SDK for apps, a sibling checkout the docs read.
+    pub fn sdk(&self) -> PathBuf {
+        self.root.join("misty-sdk")
+    }
+
+    /// The design system, a sibling checkout the app, the website and the docs use.
+    pub fn ui(&self) -> PathBuf {
+        self.root.join("misty-ui")
+    }
+
     /// For commands that work on the server, which is a sibling checkout.
     pub fn require_server(&self) -> Result<()> {
         if !self.server.join("go.mod").is_file() {

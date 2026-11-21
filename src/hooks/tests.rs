@@ -33,6 +33,18 @@ fn server_cloud_and_website_select_their_suites() {
 }
 
 #[test]
+fn docs_sdk_and_ui_select_their_suites() {
+    assert_eq!(docs::suites_for(["content/account/plans.md"]), ["typecheck"]);
+    assert_eq!(docs::suites_for(["sources.json"]), ["typecheck"]);
+    assert!(docs::suites_for(["README.md"]).is_empty());
+    assert_eq!(sdk::suites_for(["packages/sdk/src/room.ts"]), ["check"]);
+    assert!(sdk::suites_for(["docs/react.md"]).is_empty());
+    assert_eq!(ui::suites_for(["DESIGN.md"]), ["test"]);
+    assert_eq!(ui::suites_for(["src/layout/DocsLayout.tsx"]), ["test"]);
+    assert!(ui::suites_for(["README.md"]).is_empty());
+}
+
+#[test]
 fn all_expands_per_repository() {
     assert_eq!(Repo::App.expand("all"), app::ALL);
     assert_eq!(Repo::App.expand("release").last(), Some(&"desktop-windows"));
@@ -59,6 +71,13 @@ fn repositories_are_told_apart_by_their_layout() {
     assert_eq!(Repo::detect(&server).unwrap(), Repo::Server);
     assert_eq!(Repo::detect(&cloud).unwrap(), Repo::Cloud);
     assert_eq!(Repo::detect(&website).unwrap(), Repo::Website);
+    // The docs have the website's Vite files, and sources.json tells them apart.
+    let docs = make("misty-docs", &["vite.config.ts", "index.html", "sources.json"]);
+    let sdk = make("misty-sdk", &["packages/sdk/package.json"]);
+    let ui = make("misty-ui", &["DESIGN.md", "src/index.ts"]);
+    assert_eq!(Repo::detect(&docs).unwrap(), Repo::Docs);
+    assert_eq!(Repo::detect(&sdk).unwrap(), Repo::Sdk);
+    assert_eq!(Repo::detect(&ui).unwrap(), Repo::Ui);
     assert!(Repo::detect(directory.path()).is_err());
 }
 

@@ -15,6 +15,7 @@ misty-org/
   misty-server/    optional, for the server commands
   misty-cloud/     optional, for the cloud commands
   misty-website/   optional, for the website command
+  misty-docs/      optional, mounted in the website
 ```
 
 ```sh
@@ -42,10 +43,10 @@ step at a time. `--workspace <folder>` or `MISTY_ROOT` points it at another fold
 | `misty server test [--isolated] [go test args]` | Runs the Go suite on a fresh test database in the development stack's Postgres, or with `--isolated` on a disposable container, split across jobs, as the hooks do. |
 | `misty server goose <command>` | Runs goose on the server's migrations against the development database, e.g. `up` or `status`. |
 | `misty server stack-test` | Runs the whole server stack (`compose.yml`) against a fake Cloudflare API, then removes everything it made. |
-| `misty website dev` | Runs the website. |
-| `misty check app\|scripts\|features\|server\|go-sizes\|website\|acceptance\|cli\|all` | Runs a repository's checks. `acceptance` runs misty's live tests against real models and the local stack. |
-| `misty hook install` | Installs `pre-commit` and `pre-push` in misty, misty-server, misty-cloud and misty-website. There is no hosted CI. |
-| `misty hook run <suite>…` | Runs the current repository's hook suites by hand, e.g. `frontend`, `go`, `web`, `secrets` or `all`. `MISTY_COMMIT_SECONDS=<n>` caps misty's commit checks for once. |
+| `misty website dev` | Runs the website, and the docs with it: misty-docs (beside it, packages installed on first run) is mounted on `docs.localhost`, reading misty-sdk's and misty-ui's docs from their checkouts. |
+| `misty check app\|scripts\|features\|server\|go-sizes\|website\|docs\|acceptance\|cli\|all` | Runs a repository's checks. `docs` type-checks and builds misty-docs, which also reads misty-sdk's and misty-ui's docs, so a broken page in any of them fails it. `acceptance` runs misty's live tests against real models and the local stack. |
+| `misty hook install` | Installs `pre-commit` and `pre-push` in misty, misty-server, misty-cloud, misty-website, misty-docs, misty-sdk and misty-ui. There is no hosted CI. |
+| `misty hook run <suite>…` | Runs the current repository's hook suites by hand, e.g. `frontend`, `go`, `web`, `check`, `test`, `docs`, `secrets` or `all`. `MISTY_COMMIT_SECONDS=<n>` caps misty's commit checks for once. |
 | `misty cloud release <version>` | Builds misty-cloud's billing image here, pushes it to GHCR, tags the commit and pins the digest in `deploy/billing/version.env` (commit it). |
 | `misty cloud pin-server <commit>` | Pins the misty-server release production runs: its `compose.yml` and published images, in misty-cloud's `deploy/misty-server/` (commit both). |
 | `misty cloud ship [--host misty-vps] [--path misty-cloud] [--up]` | Copies the committed deploy files (`deploy/prod-files.txt`) to the VPS, never `.env/`; `--up` then starts the stack there. |

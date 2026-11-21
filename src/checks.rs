@@ -20,6 +20,10 @@ pub fn all(workspace: &Workspace) -> Result<()> {
     app(workspace)?;
     server(workspace)?;
     website(workspace)?;
+    // The docs are an optional checkout, so a computer without them still passes.
+    if workspace.docs().join("package.json").is_file() {
+        docs(workspace)?;
+    }
     features(workspace)?;
     cli(workspace)
 }
@@ -129,6 +133,22 @@ pub fn website(workspace: &Workspace) -> Result<()> {
             .args(["run", script])
             .run(&workspace.website)?;
     }
+    Ok(())
+}
+
+/// misty-docs: a type-checked production build, which also reads the docs of every repository it
+/// pulls from (misty-sdk, misty-ui), so a broken page in any of them fails here.
+pub fn docs(workspace: &Workspace) -> Result<()> {
+    let docs = workspace.docs();
+    if !docs.join("package.json").is_file() {
+        bail!(
+            "This needs misty-docs beside this checkout, at {}. Clone it with: git clone https://github.com/misty-org/misty-docs.git",
+            docs.display()
+        );
+    }
+    CommandSpec::new(npm()).args(["install", "--no-audit", "--no-fund"]).run(&docs)?;
+    // `build` type-checks first (`tsc -b && vite build`).
+    CommandSpec::new(npm()).args(["run", "build"]).run(&docs)?;
     Ok(())
 }
 

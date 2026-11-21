@@ -17,13 +17,16 @@ use crate::{process::CommandSpec, workspace::Workspace};
 
 mod app;
 mod cloud;
+mod docs;
 mod postgres;
 mod runner;
 mod secrets;
 mod server;
+mod sdk;
 mod server_tests;
 #[cfg(test)]
 mod tests;
+mod ui;
 mod website;
 
 pub use runner::Failed;
@@ -62,6 +65,9 @@ pub enum Repo {
     Server,
     Cloud,
     Website,
+    Docs,
+    Sdk,
+    Ui,
 }
 
 impl Repo {
@@ -72,11 +78,18 @@ impl Repo {
             Ok(Self::Server)
         } else if root.join("cmd/misty-cloud").is_dir() {
             Ok(Self::Cloud)
+        } else if root.join("sources.json").is_file() && root.join("vite.config.ts").is_file() {
+            // Before the website, which has the same Vite files.
+            Ok(Self::Docs)
         } else if root.join("vite.config.ts").is_file() && root.join("index.html").is_file() {
             Ok(Self::Website)
+        } else if root.join("packages/sdk/package.json").is_file() {
+            Ok(Self::Sdk)
+        } else if root.join("DESIGN.md").is_file() && root.join("src/index.ts").is_file() {
+            Ok(Self::Ui)
         } else {
             bail!(
-                "{} is not misty, misty-server, misty-cloud or misty-website",
+                "{} is not misty, misty-server, misty-cloud, misty-website, misty-docs, misty-sdk or misty-ui",
                 root.display()
             )
         }
@@ -89,6 +102,9 @@ impl Repo {
             Self::Server => server::suite(root, name),
             Self::Cloud => cloud::suite(root, name),
             Self::Website => website::suite(root, name),
+            Self::Docs => docs::suite(root, name),
+            Self::Sdk => sdk::suite(root, name),
+            Self::Ui => ui::suite(root, name),
         }
     }
 
@@ -105,6 +121,9 @@ impl Repo {
             (Self::Server, "all") => server::ALL.to_vec(),
             (Self::Cloud, "all") => cloud::ALL.to_vec(),
             (Self::Website, "all") => website::ALL.to_vec(),
+            (Self::Docs, "all") => docs::ALL.to_vec(),
+            (Self::Sdk, "all") => sdk::ALL.to_vec(),
+            (Self::Ui, "all") => ui::ALL.to_vec(),
             _ => vec![name],
         }
     }
@@ -137,6 +156,9 @@ pub fn dispatch(workspace: &Workspace, command: HookCommand) -> Result<()> {
             Repo::Server => server::pre_commit(&root),
             Repo::Cloud => cloud::pre_commit(&root),
             Repo::Website => website::pre_commit(&root),
+            Repo::Docs => docs::pre_commit(&root),
+            Repo::Sdk => sdk::pre_commit(&root),
+            Repo::Ui => ui::pre_commit(&root),
         },
         HookCommand::PrePush { .. } => {
             let mut refs = String::new();
@@ -146,6 +168,9 @@ pub fn dispatch(workspace: &Workspace, command: HookCommand) -> Result<()> {
                 Repo::Server => server::pre_push(&root, &refs),
                 Repo::Cloud => cloud::pre_push(&root),
                 Repo::Website => website::pre_push(&root),
+                Repo::Docs => docs::pre_push(&root),
+                Repo::Sdk => sdk::pre_push(&root),
+                Repo::Ui => ui::pre_push(&root),
             }
         }
         HookCommand::Run { suites } => {
@@ -164,6 +189,9 @@ pub fn dispatch(workspace: &Workspace, command: HookCommand) -> Result<()> {
                 Repo::Server => server::suites_for(paths.lines()),
                 Repo::Cloud => cloud::suites_for(paths.lines()),
                 Repo::Website => website::suites_for(paths.lines()),
+                Repo::Docs => docs::suites_for(paths.lines()),
+                Repo::Sdk => sdk::suites_for(paths.lines()),
+                Repo::Ui => ui::suites_for(paths.lines()),
             };
             for suite in suites {
                 println!("{suite}");
@@ -183,11 +211,15 @@ fn install(workspace: &Workspace) -> Result<()> {
     let program = std::env::current_exe().context("could not find the misty binary")?;
     let mut installed = 0;
     for checkout in [
-        &workspace.misty,
-        &workspace.server,
-        &workspace.cloud,
-        &workspace.website,
+        workspace.misty.clone(),
+        workspace.server.clone(),
+        workspace.cloud.clone(),
+        workspace.website.clone(),
+        workspace.docs(),
+        workspace.sdk(),
+        workspace.ui(),
     ] {
+        let checkout = &checkout;
         if !checkout.join(".git").exists() {
             continue;
         }

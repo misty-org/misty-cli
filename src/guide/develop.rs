@@ -49,6 +49,7 @@ enum Checks {
     App,
     Server,
     Website,
+    Docs,
     Cli,
 }
 
@@ -58,6 +59,7 @@ pub(super) fn checks(workspace: &Workspace) -> Result<()> {
         .item(Checks::App, "The app", "")
         .item(Checks::Server, "The server", "")
         .item(Checks::Website, "The website", "")
+        .item(Checks::Docs, "The docs", "")
         .item(Checks::Cli, "This CLI", "")
         .interact()?;
     match target {
@@ -65,6 +67,7 @@ pub(super) fn checks(workspace: &Workspace) -> Result<()> {
         Checks::App => checks::app(workspace)?,
         Checks::Server => checks::server(workspace)?,
         Checks::Website => checks::website(workspace)?,
+        Checks::Docs => checks::docs(workspace)?,
         Checks::Cli => checks::cli(workspace)?,
     }
     cliclack::outro("Every check passed.")?;

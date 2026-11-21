@@ -55,6 +55,7 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
                 checks::go_file_sizes(&settings.workspace.server)
             }
             CheckTarget::Website => checks::website(&settings.workspace),
+            CheckTarget::Docs => checks::docs(&settings.workspace),
             CheckTarget::Features => checks::features(&settings.workspace),
             CheckTarget::Acceptance => checks::acceptance(&settings.workspace),
             CheckTarget::Cli => checks::cli(&settings.workspace),

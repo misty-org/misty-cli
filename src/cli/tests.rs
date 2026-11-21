@@ -14,6 +14,7 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "check", "app"],
         vec!["misty", "check", "server"],
         vec!["misty", "check", "website"],
+        vec!["misty", "check", "docs"],
         vec!["misty", "check", "features"],
         vec!["misty", "check", "acceptance"],
         vec!["misty", "check", "cli"],

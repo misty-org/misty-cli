@@ -66,9 +66,11 @@ pub(super) fn verify_rust_targets(settings: &Settings) -> Result<()> {
 }
 
 pub(super) fn report_repository_status(settings: &Settings) -> Result<()> {
+    let docs = settings.workspace.docs();
     for (name, repository) in [
         ("misty", &settings.workspace.misty),
         ("misty-website", &settings.workspace.website),
+        ("misty-docs", &docs),
     ] {
         if !repository.is_dir() {
             println!("{name:<18} optional checkout absent");

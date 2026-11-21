@@ -31,7 +31,7 @@ pub(super) enum Command {
     Build,
     /// Run the desktop app in development, clean its build output or update its icons.
     Desktop(Desktop),
-    /// Run the public website.
+    /// Run the public website, and the docs with it.
     Website(Website),
     /// Run the local server stack.
     Server(Server),
@@ -72,6 +72,7 @@ pub(super) enum CheckTarget {
     Server,
     GoSizes,
     Website,
+    Docs,
     Features,
     Acceptance,
     Cli,
