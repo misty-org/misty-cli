@@ -127,6 +127,27 @@ pub fn sync_icons(workspace: &Workspace, source: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
+/// Copies misty-apps' catalog (the pins to the makers' own releases) into misty, which carries it with its release.
+/// misty's own `npm run sync:apps` does the copy, so there is one way to make it.
+pub fn sync_apps_catalog(workspace: &Workspace, source: Option<&Path>) -> Result<()> {
+    let source = source
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| workspace.apps());
+    if !source.join("catalog.json").is_file() {
+        bail!(
+            "No misty-apps catalog at {}. Clone it beside misty with: git clone https://github.com/misty-org/misty-apps.git, or pass --source.",
+            source.display()
+        );
+    }
+    let source = source.canonicalize()?;
+    CommandSpec::new(npm())
+        .args(["run", "sync:apps", "--"])
+        .arg(source.as_os_str())
+        .run(&workspace.misty)?;
+    println!("The apps catalog is synchronized.");
+    Ok(())
+}
+
 fn validate_route(route: Option<&str>) -> Result<()> {
     let Some(route) = route else {
         return Ok(());

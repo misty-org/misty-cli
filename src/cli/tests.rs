@@ -21,6 +21,8 @@ fn parses_the_stable_command_surface() {
         vec!["misty", "desktop", "dev", "--route", "/spaces/demo"],
         vec!["misty", "desktop", "clean", "--apply"],
         vec!["misty", "desktop", "icons", "sync"],
+        vec!["misty", "desktop", "apps", "sync"],
+        vec!["misty", "desktop", "apps", "sync", "--source", "../misty-apps"],
         vec!["misty", "website", "dev"],
         vec!["misty", "server", "up", "--no-build"],
         vec!["misty", "server", "url"],

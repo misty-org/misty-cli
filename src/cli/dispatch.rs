@@ -72,6 +72,11 @@ pub fn dispatch(arguments: Cli, settings: Settings) -> Result<()> {
                     desktop::sync_icons(&settings.workspace, source.as_deref())
                 }
             },
+            DesktopCommand::Apps { command } => match command {
+                AppsCommand::Sync { source } => {
+                    desktop::sync_apps_catalog(&settings.workspace, source.as_deref())
+                }
+            },
         },
 
         Command::Website(command) => match command.command {

@@ -29,7 +29,7 @@ pub(super) enum Command {
     Cloud(crate::cloud::Cloud),
     /// Build the app, step by step.
     Build,
-    /// Run the desktop app in development, clean its build output or update its icons.
+    /// Run the desktop app in development, clean its build output, or update its icons or apps catalog.
     Desktop(Desktop),
     /// Run the public website, and the docs with it.
     Website(Website),
@@ -115,6 +115,21 @@ pub(super) enum DesktopCommand {
     Icons {
         #[command(subcommand)]
         command: IconCommand,
+    },
+    /// Update the apps catalog the app carries.
+    Apps {
+        #[command(subcommand)]
+        command: AppsCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub(super) enum AppsCommand {
+    /// Copy misty-apps' catalog into the app.
+    Sync {
+        /// The misty-apps checkout to copy from. Defaults to the one beside misty.
+        #[arg(long)]
+        source: Option<PathBuf>,
     },
 }
 

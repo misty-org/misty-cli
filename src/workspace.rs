@@ -64,6 +64,11 @@ impl Workspace {
         self.root.join("misty-sdk")
     }
 
+    /// The reviewed apps catalog, a sibling checkout the app carries a copy of.
+    pub fn apps(&self) -> PathBuf {
+        self.root.join("misty-apps")
+    }
+
     /// The design system, a sibling checkout the app, the website and the docs use.
     pub fn ui(&self) -> PathBuf {
         self.root.join("misty-ui")

@@ -39,6 +39,7 @@ step at a time. `--workspace <folder>` or `MISTY_ROOT` points it at another fold
 | `misty desktop dev [--route /path]` | Runs the app against the local server stack. |
 | `misty desktop clean [--apply]` | Lists misty's build output and caches; `--apply` removes them. |
 | `misty desktop icons sync` | Makes every icon size from `src-tauri/icons/icon.icns`. |
+| `misty desktop apps sync [--source <misty-apps>]` | Copies misty-apps' `catalog.json` (beside misty, by default) into the app, which carries it with its release. A misty test fails at commit while the copy is behind. |
 | `misty server up\|status\|logs\|down\|url\|deploy` | Runs the development stack: Postgres, the API and a Cloudflare tunnel in Docker, and the collaboration Worker on Cloudflare. |
 | `misty server test [--isolated] [go test args]` | Runs the Go suite on a fresh test database in the development stack's Postgres, or with `--isolated` on a disposable container, split across jobs, as the hooks do. |
 | `misty server goose <command>` | Runs goose on the server's migrations against the development database, e.g. `up` or `status`. |
