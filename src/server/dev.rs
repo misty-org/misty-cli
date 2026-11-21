@@ -4,7 +4,15 @@ use super::*;
 
 pub fn up(workspace: &Workspace, build: bool, verbose: bool) -> Result<()> {
     environment::check(workspace)?;
+    ensure_livekit_secret(workspace)?;
     validate_development_secrets(workspace)?;
+    // LiveKit's media goes straight to this Mac (a tunnel carries no UDP), so it offers the
+    // address people on this network reach it at; compose.dev.yml reads it.
+    if let Some(address) = lan_address() {
+        env::set_var("MISTY_DEV_LAN_IP", address);
+    } else {
+        eprintln!("No local network address found; calls will connect only on this computer.");
+    }
     ports(workspace)?;
     println!("Starting server containers…");
     let command = development_up_command(build);
@@ -38,7 +46,9 @@ fn deploy_worker_if_changed(workspace: &Workspace) {
     let fingerprint = match worker_fingerprint(workspace) {
         Ok(fingerprint) => fingerprint,
         Err(error) => {
-            eprintln!("Couldn't read the Worker's source ({error}); deploy it with misty server deploy");
+            eprintln!(
+                "Couldn't read the Worker's source ({error}); deploy it with misty server deploy"
+            );
             return;
         }
     };
@@ -69,7 +79,12 @@ fn worker_fingerprint(workspace: &Workspace) -> Result<String> {
         .filter(|entry| entry.file_type().is_file())
         .map(|entry| entry.into_path())
         .collect();
-    for name in ["wrangler.jsonc", "package.json", "package-lock.json", "tsconfig.json"] {
+    for name in [
+        "wrangler.jsonc",
+        "package.json",
+        "package-lock.json",
+        "tsconfig.json",
+    ] {
         let path = root.join(name);
         if path.is_file() {
             files.push(path);
@@ -97,7 +112,36 @@ fn worker_fingerprint(workspace: &Workspace) -> Result<String> {
 }
 
 pub fn initialize_development_secrets(workspace: &Workspace) -> Result<()> {
-    ensure_worker_secrets(workspace)
+    ensure_worker_secrets(workspace)?;
+    ensure_livekit_secret(workspace)
+}
+
+/// Makes the secret the development API signs call tokens with, once; it is never replaced.
+fn ensure_livekit_secret(workspace: &Workspace) -> Result<()> {
+    let values = environment::read(workspace)?;
+    if values
+        .get("LIVEKIT_API_SECRET")
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Ok(());
+    }
+    let mut bytes = [0_u8; 32];
+    OsRng.fill_bytes(&mut bytes);
+    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes);
+    environment::set(workspace, "LIVEKIT_API_SECRET", &secret)
+}
+
+/// This computer's address on its local network (macOS's Wi-Fi or Ethernet), if it has one.
+fn lan_address() -> Option<String> {
+    ["en0", "en1"].iter().find_map(|interface| {
+        let output = std::process::Command::new("ipconfig")
+            .args(["getifaddr", interface])
+            .output()
+            .ok()?;
+        let address = String::from_utf8(output.stdout).ok()?.trim().to_owned();
+        (output.status.success() && address.parse::<std::net::Ipv4Addr>().is_ok())
+            .then_some(address)
+    })
 }
 
 pub fn down(workspace: &Workspace, volumes: bool) -> Result<()> {

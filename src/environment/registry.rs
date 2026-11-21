@@ -119,6 +119,9 @@ pub(super) const FILES: &[FileSpec] = &[
             "MISTY_DEV_ALLOWED_ORIGINS",
             "MISTY_DEV_API_ORIGIN",
             "MISTY_DEV_API_TUNNEL_HOSTNAME",
+            // Where the development tunnel publishes LiveKit's signalling for calls: the API
+            // hostname's calls sibling (dev-api-calls.example.com beside dev-api.example.com).
+            "MISTY_DEV_CALLS_HOSTNAME",
             "PARTYKIT_HOST",
         ],
     },
@@ -148,6 +151,11 @@ pub(super) const FILES: &[FileSpec] = &[
             // accepts until it is retired.
             "JOURNAL_COLLAB_TICKET_PUBLIC_KEY_PREVIOUS",
         ],
+    },
+    FileSpec {
+        // The secret the development API signs call tokens with and LiveKit checks them by.
+        path: "crypto/livekit.env",
+        names: &["LIVEKIT_API_SECRET"],
     },
     FileSpec {
         path: "crypto/spaces.env",

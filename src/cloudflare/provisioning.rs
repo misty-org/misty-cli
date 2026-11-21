@@ -82,6 +82,7 @@ fn provision(
 ) -> Result<()> {
     let host = selected_hostname(&options, &values)?;
     let service = service();
+    let calls_host = calls_hostname(&host);
     id(&account)?;
     id(&zone)?;
     hostname(&host)?;
@@ -123,23 +124,9 @@ fn provision(
     if matches.len() > 1 {
         bail!("multiple tunnels have this name; choose a unique tunnel name");
     }
-    let dns = request(
-        "GET",
-        &format!("zones/{zone}/dns_records?name={host}"),
-        None,
-    )?;
-    let records = dns.as_array().context("invalid DNS response")?;
-    if records.len() > 1 {
-        bail!("multiple DNS records exist for {host}; resolve the conflict first");
-    }
     let existing_id = matches.first().and_then(|v| v["id"].as_str());
-    if let Some(record) = records.first() {
-        if existing_id.is_none_or(|tid| {
-            record["type"] != "CNAME" || record["content"] != format!("{tid}.cfargotunnel.com")
-        }) {
-            bail!("DNS hostname is already used by another resource; no changes made");
-        }
-    }
+    let records = tunnel_dns(&mut request, &zone, &host, existing_id)?;
+    let calls_records = tunnel_dns(&mut request, &zone, &calls_host, existing_id)?;
     let current = if let Some(tid) = existing_id {
         if matches[0]["config_src"] == "local" {
             bail!("existing tunnel is locally managed; choose another tunnel name");
@@ -153,6 +140,7 @@ fn provision(
         json!({})
     };
     let config = merge_ingress(&current, &host, &service)?;
+    let config = merge_ingress(&json!({ "config": config }), &calls_host, &calls_service())?;
     let (worker_name, worker_host) = {
         let subdomain = request(
             "GET",
@@ -180,7 +168,7 @@ fn provision(
         let worker_host = format!("{worker_name}.{subdomain}.workers.dev");
         (worker_name, worker_host)
     };
-    println!("Cloudflare server plan: account {account}, zone {zone_name}\nTunnel: {name}\nRoute: https://{host} → {service}\nDNS: proxied CNAME to the tunnel");
+    println!("Cloudflare server plan: account {account}, zone {zone_name}\nTunnel: {name}\nRoute: https://{host} → {service}\nCalls: https://{calls_host} → {}\nDNS: proxied CNAMEs to the tunnel", calls_service());
     println!("Worker: deploy separately with misty server deploy");
     if !options.apply {
         println!(
@@ -202,23 +190,8 @@ fn provision(
     };
     let path = format!("accounts/{account}/cfd_tunnel/{tunnel}/configurations");
     request("PUT", &path, Some(json!({"config":config})))?;
-    if records.is_empty() {
-        request(
-            "POST",
-            &format!("zones/{zone}/dns_records"),
-            Some(
-                json!({"type":"CNAME","name":host,"content":format!("{tunnel}.cfargotunnel.com"),"proxied":true}),
-            ),
-        )?;
-    }
-    if let Some(record) = records.first().filter(|r| r["proxied"] != true) {
-        let record_id = record["id"].as_str().context("DNS record has no ID")?;
-        request(
-            "PATCH",
-            &format!("zones/{zone}/dns_records/{record_id}"),
-            Some(json!({"proxied":true})),
-        )?;
-    }
+    route_dns(&mut request, &zone, &host, &tunnel, &records)?;
+    route_dns(&mut request, &zone, &calls_host, &tunnel, &calls_records)?;
     let tunnel_token = request(
         "GET",
         &format!("accounts/{account}/cfd_tunnel/{tunnel}/token"),
@@ -237,6 +210,7 @@ fn provision(
         ("MISTY_CLOUDFLARE_WORKER_HOST", worker_host),
         ("MISTY_DEV_API_ORIGIN", format!("https://{host}")),
         ("MISTY_DEV_API_TUNNEL_HOSTNAME", host),
+        ("MISTY_DEV_CALLS_HOSTNAME", calls_host),
     ];
     for (key, val) in settings {
         environment::set(workspace, key, &val)?;
@@ -248,3 +222,57 @@ mod ingress;
 use ingress::*;
 #[cfg(test)]
 mod tests;
+
+/// The DNS records already at `host`, refusing one that points anywhere but this tunnel.
+fn tunnel_dns(
+    request: &mut impl FnMut(&str, &str, Option<Value>) -> Result<Value>,
+    zone: &str,
+    host: &str,
+    tunnel: Option<&str>,
+) -> Result<Vec<Value>> {
+    let dns = request(
+        "GET",
+        &format!("zones/{zone}/dns_records?name={host}"),
+        None,
+    )?;
+    let records = dns.as_array().context("invalid DNS response")?.clone();
+    if records.len() > 1 {
+        bail!("multiple DNS records exist for {host}; resolve the conflict first");
+    }
+    if let Some(record) = records.first() {
+        if tunnel.is_none_or(|tid| {
+            record["type"] != "CNAME" || record["content"] != format!("{tid}.cfargotunnel.com")
+        }) {
+            bail!("DNS hostname {host} is already used by another resource; no changes made");
+        }
+    }
+    Ok(records)
+}
+
+/// Points `host` at the tunnel, proxied, unless it already is.
+fn route_dns(
+    request: &mut impl FnMut(&str, &str, Option<Value>) -> Result<Value>,
+    zone: &str,
+    host: &str,
+    tunnel: &str,
+    records: &[Value],
+) -> Result<()> {
+    if records.is_empty() {
+        request(
+            "POST",
+            &format!("zones/{zone}/dns_records"),
+            Some(
+                json!({"type":"CNAME","name":host,"content":format!("{tunnel}.cfargotunnel.com"),"proxied":true}),
+            ),
+        )?;
+    }
+    if let Some(record) = records.first().filter(|r| r["proxied"] != true) {
+        let record_id = record["id"].as_str().context("DNS record has no ID")?;
+        request(
+            "PATCH",
+            &format!("zones/{zone}/dns_records/{record_id}"),
+            Some(json!({"proxied":true})),
+        )?;
+    }
+    Ok(())
+}

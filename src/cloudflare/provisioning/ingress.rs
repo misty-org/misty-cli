@@ -49,3 +49,18 @@ pub(super) fn selected_hostname(
 pub(super) fn service() -> String {
     "http://misty-api:8080".to_owned()
 }
+
+/// Where the development tunnel publishes LiveKit's signalling: the API hostname's sibling, as
+/// misty-server's `serverenv.CallsHostname` names it ("dev-api-calls.example.com" beside
+/// "dev-api.example.com"), so Cloudflare's universal certificate covers it.
+pub(super) fn calls_hostname(host: &str) -> String {
+    match host.split_once('.') {
+        Some((first, rest)) if rest.contains('.') => format!("{first}-calls.{rest}"),
+        _ => format!("calls.{host}"),
+    }
+}
+
+/// The development tunnel routes calls to LiveKit on the dev network.
+pub(super) fn calls_service() -> String {
+    "http://livekit:7880".to_owned()
+}

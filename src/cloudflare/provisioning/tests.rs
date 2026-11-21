@@ -47,7 +47,14 @@ impl Cloudflare {
                 Ok(json!({"name":"example.com", "account":{"id":ACCOUNT}}))
             }
             ("GET", p) if p.contains("/cfd_tunnel?") => Ok(json!(self.tunnels)),
-            ("GET", p) if p.contains("/dns_records?") => Ok(json!(self.dns)),
+            ("GET", p) if p.contains("/dns_records?") => {
+                let name = p
+                    .split_once("name=")
+                    .map(|(_, name)| name)
+                    .unwrap_or_default();
+                let found: Vec<&Value> = self.dns.iter().filter(|r| r["name"] == name).collect();
+                Ok(json!(found))
+            }
             ("GET", p) if p.ends_with("/configurations") => Ok(self.config.clone()),
             ("GET", p) if p.ends_with("/workers/subdomain") => Ok(json!({"subdomain":"fixture"})),
             ("POST", p) if p.ends_with("/cfd_tunnel") => {
@@ -62,13 +69,15 @@ impl Cloudflare {
             }
             ("POST", p) if p.ends_with("/dns_records") => {
                 let mut record = body.unwrap();
-                record["id"] = json!("fixture-record");
+                record["id"] = json!(format!("fixture-record-{}", self.dns.len()));
                 self.dns.push(record.clone());
                 Ok(record)
             }
-            ("PATCH", p) if p.ends_with("/dns_records/fixture-record") => {
-                self.dns[0]["proxied"] = json!(true);
-                Ok(self.dns[0].clone())
+            ("PATCH", p) if p.contains("/dns_records/") => {
+                let id = p.rsplit('/').next().unwrap();
+                let record = self.dns.iter_mut().find(|r| r["id"] == id).unwrap();
+                record["proxied"] = json!(true);
+                Ok(record.clone())
             }
             ("GET", p) if p.ends_with("/token") => Ok(json!("fixture-connector-token")),
             _ => panic!("unexpected Cloudflare request: {method} {path}"),
@@ -108,6 +117,25 @@ fn development_still_provisions_worker_configuration_and_container_origin() {
         cloudflare.config["config"]["ingress"][0]["service"],
         "http://misty-api:8080"
     );
+    // Calls: LiveKit's signalling at the API hostname's calls sibling, with its own DNS record.
+    assert_eq!(values["MISTY_DEV_CALLS_HOSTNAME"], "api-calls.example.com");
+    assert_eq!(
+        cloudflare.config["config"]["ingress"][1],
+        json!({"hostname":"api-calls.example.com","service":"http://livekit:7880"})
+    );
+    assert!(cloudflare
+        .dns
+        .iter()
+        .any(|r| r["name"] == "api-calls.example.com"));
+}
+
+#[test]
+fn calls_hostname_is_the_api_hostnames_sibling() {
+    assert_eq!(
+        calls_hostname("dev-api.example.com"),
+        "dev-api-calls.example.com"
+    );
+    assert_eq!(calls_hostname("example.com"), "calls.example.com");
 }
 
 #[test]
@@ -123,7 +151,7 @@ fn development_rerun_is_repeatable() {
     cloudflare.run(&workspace, rerun).unwrap();
     assert_eq!(cloudflare.config, config_before);
     assert_eq!(cloudflare.tunnels.len(), 1);
-    assert_eq!(cloudflare.dns.len(), 1);
+    assert_eq!(cloudflare.dns.len(), 2);
     assert!(!cloudflare.calls.iter().any(|(method, _)| method == "POST"));
 }
 
@@ -132,7 +160,7 @@ fn conflicting_dns_is_rejected_before_writes() {
     let temporary = tempfile::tempdir().unwrap();
     let workspace = Workspace::from_root(temporary.path().to_owned()).unwrap();
     let mut cloudflare = Cloudflare {
-        dns: vec![json!({"type":"A", "content":"192.0.2.1"})],
+        dns: vec![json!({"type":"A", "name":"api.example.com", "content":"192.0.2.1"})],
         ..Default::default()
     };
     assert!(cloudflare
